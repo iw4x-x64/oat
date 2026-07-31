@@ -2,6 +2,7 @@
 
 #include "Game/IW3/ObjCompilerIW3.h"
 #include "Game/IW4/ObjCompilerIW4.h"
+#include "Game/IW4MS/ObjCompilerIW4MS.h"
 #include "Game/IW5/ObjCompilerIW5.h"
 #include "Game/QOS/ObjCompilerQOS.h"
 #include "Game/T4/ObjCompilerT4.h"
@@ -15,6 +16,7 @@ const IObjCompiler* IObjCompiler::GetObjCompilerForGame(GameId game)
     static const IObjCompiler* objCompilers[]{
         new IW3::ObjCompiler(),
         new IW4::ObjCompiler(),
+        new IW4MS::ObjCompiler(),
         new IW5::ObjCompiler(),
         new QOS::ObjCompiler(),
         new T4::ObjCompiler(),

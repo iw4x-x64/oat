@@ -2,6 +2,7 @@
 
 #include "Game/IW3/ObjLoaderIW3.h"
 #include "Game/IW4/ObjLoaderIW4.h"
+#include "Game/IW4MS/ObjLoaderIW4MS.h"
 #include "Game/IW5/ObjLoaderIW5.h"
 #include "Game/QOS/ObjLoaderQOS.h"
 #include "Game/T4/ObjLoaderT4.h"
@@ -15,6 +16,7 @@ const IObjLoader* IObjLoader::GetObjLoaderForGame(GameId game)
     static const IObjLoader* zoneCreators[]{
         new IW3::ObjLoader(),
         new IW4::ObjLoader(),
+        new IW4MS::ObjLoader(),
         new IW5::ObjLoader(),
         new QOS::ObjLoader(),
         new T4::ObjLoader(),

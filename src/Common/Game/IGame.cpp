@@ -2,6 +2,7 @@
 
 #include "IW3/GameIW3.h"
 #include "IW4/GameIW4.h"
+#include "IW4MS/GameIW4MS.h"
 #include "IW5/GameIW5.h"
 #include "QOS/GameQOS.h"
 #include "T4/GameT4.h"
@@ -16,6 +17,7 @@ IGame* IGame::GetGameById(GameId gameId)
     static IGame* games[]{
         new IW3::Game(),
         new IW4::Game(),
+        new IW4MS::Game(),
         new IW5::Game(),
         new QOS::Game(),
         new T4::Game(),
@@ -29,6 +31,20 @@ IGame* IGame::GetGameById(GameId gameId)
     assert(result);
 
     return result;
+}
+
+std::optional<GameId> IGame::FindGameIdByName(const std::string_view gameName)
+{
+    std::string upperGameName(gameName);
+    utils::MakeStringUpperCase(upperGameName);
+
+    for (auto i = 0u; i < static_cast<unsigned>(GameId::COUNT); i++)
+    {
+        if (upperGameName == GameId_Names[i])
+            return static_cast<GameId>(i);
+    }
+
+    return std::nullopt;
 }
 
 AbstractGame::AbstractGame(const char* const* assetTypeNames,

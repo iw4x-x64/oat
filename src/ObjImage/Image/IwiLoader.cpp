@@ -200,7 +200,7 @@ namespace
         return nullptr;
     }
 
-    std::optional<IwiLoaderResult> LoadIwi8(std::istream& stream)
+    std::optional<IwiLoaderResult> LoadIwi8(std::istream& stream, const IwiVersion version)
     {
         iwi8::IwiHeader header{};
 
@@ -258,8 +258,22 @@ namespace
                 const auto sizeOfMipLevel = texture->GetSizeOfMipLevel(currentMipLevel) * texture->GetFaceCount();
                 currentFileSize += sizeOfMipLevel;
 
-                if (currentMipLevel < static_cast<int>(std::extent_v<decltype(iwi8::IwiHeader::fileSizeForPicmip)>)
-                    && currentFileSize != header.fileSizeForPicmip[currentMipLevel])
+                // Version 8 stores the size corresponding to each picmip level, so in this
+                // case it makes sense to validate every entry in the table.
+                //
+                // Version 9 appears to use this table somewhat differently. For example, out
+                // of 1,650 version 9 images from one MW3 map port, 1,616 stored the total size
+                // in all four entries while only 44 contained the expected descending sequence.
+                //
+                // Note that this does not mean that any mip data is missing. In both cases the
+                // complete mip chain still adds up to the file size. In other words, for version
+                // 9 we can only rely on entry zero, which contains the total size and is also
+                // the only entry checked by the game itself.
+                const auto entryIsMeaningful =
+                    currentMipLevel < static_cast<int>(std::extent_v<decltype(iwi8::IwiHeader::fileSizeForPicmip)>)
+                    && (version == IwiVersion::IWI_8 || currentMipLevel == 0);
+
+                if (entryIsMeaningful && currentFileSize != header.fileSizeForPicmip[currentMipLevel])
                 {
                     con::error("Iwi has invalid file size for picmip {}", currentMipLevel);
                     return std::nullopt;
@@ -284,7 +298,7 @@ namespace
         };
 
         return IwiLoaderResult{
-            .m_version = IwiVersion::IWI_8,
+            .m_version = version,
             .m_meta = meta,
             .m_texture = std::move(texture),
         };
@@ -565,7 +579,10 @@ namespace image
             return LoadIwi6(stream);
 
         case 8:
-            return LoadIwi8(stream);
+            return LoadIwi8(stream, IwiVersion::IWI_8);
+
+        case 9:
+            return LoadIwi8(stream, IwiVersion::IWI_9);
 
         case 13:
             return LoadIwi13(stream);
