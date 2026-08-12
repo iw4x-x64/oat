@@ -9,7 +9,5 @@ set string name;
 use MssSound;
 set block data XFILE_BLOCK_TEMP;
 set reusable data;
-set count data info::data_len;
-set condition info::data_ptr never;
-set condition info::initial_ptr never;
+set count data data_len;
 set action SetSoundData(MssSound);
