@@ -151,6 +151,31 @@ namespace
         return target;
     }
 
+    // IW4 x86's AILSOUNDINFO ends with initial_ptr; the x64 build moved it up to +16, which pushes
+    // data_len and everything after it down by 8 (see the layout note on IW4MS::AILSOUNDINFO). Both
+    // are 48 bytes, so nothing catches the mismatch by size and the header can be reordered in place.
+    //
+    // Without this, the IW4MS writer reads data_len (the count of streamed sound bytes, per
+    // `set count data info::data_len`) from +24, where x86 keeps `bits`, so every loaded sound is
+    // truncated to a handful of bytes, and rate/channels/samples/block_size are read scrambled too.
+    void RetargetLoadedSound(IW4::LoadedSound& source)
+    {
+        static_assert(sizeof(IW4::AILSOUNDINFO) == sizeof(IW4MS::AILSOUNDINFO));
+
+        const IW4::AILSOUNDINFO src = source.sound.info;
+        auto& dst = reinterpret_cast<IW4MS::AILSOUNDINFO&>(source.sound.info);
+
+        dst.format = src.format;
+        dst.data_ptr = src.data_ptr;
+        dst.initial_ptr = src.initial_ptr;
+        dst.data_len = src.data_len;
+        dst.rate = src.rate;
+        dst.bits = src.bits;
+        dst.channels = src.channels;
+        dst.samples = src.samples;
+        dst.block_size = src.block_size;
+    }
+
     constexpr auto IW4_GFX_AABB_TREE_SIZE = 44;
     constexpr auto IW4MS_GFX_AABB_TREE_SIZE = 56;
 
@@ -220,6 +245,7 @@ namespace
 
         auto waters = 0u;
         auto speakerMaps = 0u;
+        auto loadedSounds = 0u;
         auto rescaledOffsets = 0u;
         std::unordered_map<const IW4::SpeakerMap*, IW4MS::SpeakerMap*> retargetedSpeakerMaps;
         std::unordered_map<const IW4::water_t*, IW4MS::water_t*> retargetedWaters;
@@ -276,6 +302,14 @@ namespace
                     speakerMaps++;
                 }
             }
+            else if (asset->m_type == IW4::ASSET_TYPE_LOADED_SOUND)
+            {
+                if (!asset->m_ptr)
+                    continue;
+
+                RetargetLoadedSound(*static_cast<IW4::LoadedSound*>(asset->m_ptr));
+                loadedSounds++;
+            }
             else if (asset->m_type == IW4::ASSET_TYPE_GFXWORLD)
             {
                 if (!RetargetGfxWorld(*static_cast<IW4::GfxWorld*>(asset->m_ptr), rescaledOffsets))
@@ -298,11 +332,12 @@ namespace
         }
 
         con::info("Retargeted {} assets from IW4 to IW4MS: {} clipmaps rebuilt for the wider struct, {} speaker maps "
-                  "reshaped into the x64 mix matrix, {} aabb tree child offsets restated in the x64 stride, {} waters "
-                  "deinterleaved into planar spectrum halves",
+                  "reshaped into the x64 mix matrix, {} loaded sound headers reordered for the x64 field layout, {} aabb "
+                  "tree child offsets restated in the x64 stride, {} waters deinterleaved into planar spectrum halves",
                   source.m_pools.GetTotalAssetCount(),
                   retargetedClipMaps,
                   speakerMaps,
+                  loadedSounds,
                   rescaledOffsets,
                   waters);
 
