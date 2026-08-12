@@ -11,11 +11,11 @@ Actions_LoadedSound::Actions_LoadedSound(Zone& zone)
 
 void Actions_LoadedSound::SetSoundData(MssSound* sound) const
 {
-    if (sound->info.data_len > 0)
+    if (sound->data_len > 0)
     {
         const auto* tempData = sound->data;
-        sound->data = m_zone.Memory().Alloc<char>(sound->info.data_len);
-        memcpy(sound->data, tempData, sound->info.data_len);
+        sound->data = m_zone.Memory().Alloc<char>(sound->data_len);
+        memcpy(sound->data, tempData, sound->data_len);
     }
     else
     {

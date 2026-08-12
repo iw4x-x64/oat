@@ -15,16 +15,74 @@
 namespace
 {
 #ifdef ARCH_x64
-    void* RetargetClipMap(const void* source, ZoneMemory& memory)
+    // A structure the x64 build widened at the tail keeps every field it already had at the offset
+    // it already had, so an array of them carries over one element at a time into the wider
+    // stride. The writer emits count * sizeof(target) bytes from this array, so an array left at
+    // the source stride is read past its own end and every element after the first lands at a
+    // shifted offset.
+    //
+    template<typename Target_t, typename Source_t>
+    Target_t* RetargetWidenedArray(const Source_t* source, const size_t count, ZoneMemory& memory)
+    {
+        static_assert(sizeof(Source_t) < sizeof(Target_t));
+
+        if (!source || count == 0u)
+            return nullptr;
+
+        auto* target = memory.Alloc<Target_t>(count);
+
+        for (auto i = 0u; i < count; i++)
+        {
+            std::memcpy(&target[i], &source[i], sizeof(Source_t));
+            std::memset(reinterpret_cast<char*>(&target[i]) + sizeof(Source_t), 0, sizeof(Target_t) - sizeof(Source_t));
+        }
+
+        return target;
+    }
+
+    IW4MS::clipMap_t* RetargetClipMap(const IW4::clipMap_t& source, ZoneMemory& memory, unsigned& dynEntClients)
     {
         static_assert(sizeof(IW4::clipMap_t) < sizeof(IW4MS::clipMap_t));
         static_assert(offsetof(IW4::clipMap_t, checksum) == offsetof(IW4MS::clipMap_t, checksum));
+        static_assert(offsetof(IW4::clipMap_t, dynEntClientList) == offsetof(IW4MS::clipMap_t, dynEntClientList));
 
         auto* target = memory.Alloc<IW4MS::clipMap_t>();
-        std::memcpy(target, source, sizeof(IW4::clipMap_t));
+        std::memcpy(target, &source, sizeof(IW4::clipMap_t));
         std::memset(reinterpret_cast<char*>(target) + sizeof(IW4::clipMap_t), 0, sizeof(IW4MS::clipMap_t) - sizeof(IW4::clipMap_t));
 
+        // Retail allocates 16 bytes per client where the fields account for 12. See the note on
+        // IW4MS::DynEntityClient.
+        //
+        for (auto i = 0u; i < std::extent_v<decltype(source.dynEntClientList)>; i++)
+        {
+            const auto count = static_cast<size_t>(source.dynEntCount[i]);
+
+            target->dynEntClientList[i] = RetargetWidenedArray<IW4MS::DynEntityClient>(source.dynEntClientList[i], count, memory);
+
+            if (target->dynEntClientList[i])
+                dynEntClients += static_cast<unsigned>(count);
+        }
+
         return target;
+    }
+
+    // Retail allocates 48 bytes per piece where the fields account for 36. See the note on
+    // IW4MS::FxGlassPieceDynamics. FxGlassSystem is the same shape in both builds, so the array
+    // is swapped in place the way a speaker map is.
+    //
+    unsigned RetargetFxWorld(IW4::FxWorld& world, ZoneMemory& memory)
+    {
+        static_assert(sizeof(IW4::FxGlassSystem) == sizeof(IW4MS::FxGlassSystem));
+        static_assert(offsetof(IW4::FxGlassSystem, pieceDynamics) == offsetof(IW4MS::FxGlassSystem, pieceDynamics));
+
+        auto& glass = world.glassSys;
+        auto* retargeted = RetargetWidenedArray<IW4MS::FxGlassPieceDynamics>(glass.pieceDynamics, glass.pieceLimit, memory);
+
+        if (!retargeted)
+            return 0u;
+
+        glass.pieceDynamics = reinterpret_cast<IW4::FxGlassPieceDynamics*>(retargeted);
+        return glass.pieceLimit;
     }
 
     IW4MS::SpeakerMap* RetargetSpeakerMap(const IW4::SpeakerMap& source, ZoneMemory& memory)
@@ -151,29 +209,40 @@ namespace
         return target;
     }
 
-    // IW4 x86's AILSOUNDINFO ends with initial_ptr; the x64 build moved it up to +16, which pushes
-    // data_len and everything after it down by 8 (see the layout note on IW4MS::AILSOUNDINFO). Both
-    // are 48 bytes, so nothing catches the mismatch by size and the header can be reordered in place.
+    // The two builds describe a loaded sound to different audio libraries. x86 fills a Miles
+    // AILSOUNDINFO. x64 fills the WAVEFORMATEX that XAudio2 wants, laid out in the note on
+    // IW4MS::MssSound, so a converted sound has to be translated field by field. Both structures
+    // are 56 bytes with the data pointer at +48, which is why size alone catches nothing.
     //
-    // Without this, the IW4MS writer reads data_len (the count of streamed sound bytes, per
-    // `set count data info::data_len`) from +24, where x86 keeps `bits`, so every loaded sound is
-    // truncated to a handful of bytes, and rate/channels/samples/block_size are read scrambled too.
+    // Everything XAudio2 reads follows from what Miles was told. nAvgBytesPerSec is the one field
+    // with no counterpart, and it is the product of two that have one.
+    //
+    // Left unhandled, the writer emits a WAVEFORMATEX of zero channels at zero hertz. The voice
+    // is never created and every weapon in the zone plays silence.
     void RetargetLoadedSound(IW4::LoadedSound& source)
     {
-        static_assert(sizeof(IW4::AILSOUNDINFO) == sizeof(IW4MS::AILSOUNDINFO));
+        static_assert(sizeof(IW4::MssSound) == sizeof(IW4MS::MssSound));
+        static_assert(offsetof(IW4::MssSound, data) == offsetof(IW4MS::MssSound, data));
 
         const IW4::AILSOUNDINFO src = source.sound.info;
-        auto& dst = reinterpret_cast<IW4MS::AILSOUNDINFO&>(source.sound.info);
+        auto& dst = reinterpret_cast<IW4MS::MssSound&>(source.sound);
 
-        dst.format = src.format;
-        dst.data_ptr = src.data_ptr;
-        dst.initial_ptr = src.initial_ptr;
+        // block_size is x86's own channels * bits/8, which is what a block alignment is.
+        const auto blockAlign = static_cast<uint16_t>(src.block_size);
+
+        dst.wFormatTag = static_cast<uint16_t>(src.format);
+        dst.nChannels = static_cast<uint16_t>(src.channels);
+        dst.nSamplesPerSec = src.rate;
+        dst.nAvgBytesPerSec = src.rate * blockAlign;
+        dst.nBlockAlign = blockAlign;
+        dst.wBitsPerSample = static_cast<uint16_t>(src.bits);
+        dst.cbSize = 0u;
         dst.data_len = src.data_len;
-        dst.rate = src.rate;
-        dst.bits = src.bits;
-        dst.channels = src.channels;
-        dst.samples = src.samples;
-        dst.block_size = src.block_size;
+
+        // samples and initial_ptr have no counterpart, and the retail loader leaves both gaps
+        // unread. Zeroing them keeps one input producing one output.
+        std::memset(dst.unknown_18, 0, sizeof(dst.unknown_18));
+        std::memset(dst.unknown_28, 0, sizeof(dst.unknown_28));
     }
 
     constexpr auto IW4_GFX_AABB_TREE_SIZE = 44;
@@ -247,6 +316,8 @@ namespace
         auto speakerMaps = 0u;
         auto loadedSounds = 0u;
         auto rescaledOffsets = 0u;
+        auto dynEntClients = 0u;
+        auto glassPieces = 0u;
         std::unordered_map<const IW4::SpeakerMap*, IW4MS::SpeakerMap*> retargetedSpeakerMaps;
         std::unordered_map<const IW4::water_t*, IW4MS::water_t*> retargetedWaters;
 
@@ -310,6 +381,11 @@ namespace
                 RetargetLoadedSound(*static_cast<IW4::LoadedSound*>(asset->m_ptr));
                 loadedSounds++;
             }
+            else if (asset->m_type == IW4::ASSET_TYPE_FXWORLD)
+            {
+                if (asset->m_ptr)
+                    glassPieces += RetargetFxWorld(*static_cast<IW4::FxWorld*>(asset->m_ptr), target->Memory());
+            }
             else if (asset->m_type == IW4::ASSET_TYPE_GFXWORLD)
             {
                 if (!RetargetGfxWorld(*static_cast<IW4::GfxWorld*>(asset->m_ptr), rescaledOffsets))
@@ -324,18 +400,21 @@ namespace
 
             if (asset->m_type == IW4::ASSET_TYPE_CLIPMAP_SP || asset->m_type == IW4::ASSET_TYPE_CLIPMAP_MP)
             {
-                pointer = RetargetClipMap(pointer, target->Memory());
+                pointer = RetargetClipMap(*static_cast<const IW4::clipMap_t*>(pointer), target->Memory(), dynEntClients);
                 retargetedClipMaps++;
             }
 
             target->m_pools.AddAsset(asset->m_type, asset->m_name, pointer, {}, asset->m_used_script_strings, {});
         }
 
-        con::info("Retargeted {} assets from IW4 to IW4MS: {} clipmaps rebuilt for the wider struct, {} speaker maps "
-                  "reshaped into the x64 mix matrix, {} loaded sound headers reordered for the x64 field layout, {} aabb "
-                  "tree child offsets restated in the x64 stride, {} waters deinterleaved into planar spectrum halves",
+        con::info("Retargeted {} assets from IW4 to IW4MS: {} clipmaps rebuilt for the wider struct, {} dynamic entity "
+                  "clients and {} glass pieces rebuilt at the x64 stride, {} speaker maps reshaped into the x64 mix "
+                  "matrix, {} loaded sound headers restated as a WAVEFORMATEX, {} aabb tree child offsets restated in "
+                  "the x64 stride, {} waters deinterleaved into planar spectrum halves",
                   source.m_pools.GetTotalAssetCount(),
                   retargetedClipMaps,
+                  dynEntClients,
+                  glassPieces,
                   speakerMaps,
                   loadedSounds,
                   rescaledOffsets,

@@ -1803,32 +1803,64 @@ namespace IW4MS
         StringTableCell* values;
     };
 
-    // Only one offset in here is verified: the sound data byte count sits at +24. Load_MssSound at
-    // 0x1401206C0 uses [rax+18h] as the Load_Stream size, and sub_1402C71F0 uses the same field as
-    // both its allocation size and its memcpy length. The IW4 x86 order, re-aligned for 8 byte
-    // pointers, would put data_len at 16 and `bits` at 24, so the retail x64 order is genuinely
-    // different rather than merely repadded.
+    // The x64 build plays through XAudio2. The head of MssSound is the WAVEFORMATEX it hands to a
+    // voice, so every field there carries a WAVEFORMATEX meaning. sub_1402C6600 establishes this,
+    // working forward from the alias:
     //
-    // Moving initial_ptr up to +16 is the smallest arrangement that puts data_len at +24 and still
-    // totals the 48 bytes the structure must occupy, but the positions of every field other than
-    // data_len remain unverified. See Q-006 in docs/IW4MS-research.md. They do not affect zone
-    // traversal, which only needs data_len, but they do affect any dumper that writes audio.
-    struct AILSOUNDINFO
-    {
-        int format;
-        const void* data_ptr;
-        const void* initial_ptr;
-        unsigned int data_len;
-        unsigned int rate;
-        int bits;
-        int channels;
-        unsigned int samples;
-        unsigned int block_size;
-    };
-
+    //     1402c6685  mov     rax, [r13+28h]              ; alias->soundFile
+    //     1402c668c  mov     r14, [rax+8]                ; soundFile->u.loadSnd
+    //     1402c6690  mov     ebx, [r14+0Ch]              ; (1) DWORD at MssSound + 4
+    //     1402c66a3  movzx   ecx, word ptr [r14+14h]     ; (2) WORD  at MssSound + 12
+    //     1402c66aa  mov     eax, [r14+20h]              ; (3) DWORD at MssSound + 24
+    //     1402c66ae  div     ecx
+    //     1402c66b7  mulss   xmm0, 1000.0
+    //     1402c66bf  divss   xmm0, xmm8                  ; (3) / (2) * 1000 / (1)
+    //
+    // The quotient is used as a length in milliseconds. A length in milliseconds is a byte count
+    // over a block alignment over a sample rate, which fixes three of the fields:
+    //
+    //     (1) MssSound +  4 is nSamplesPerSec
+    //     (2) MssSound + 12 is nBlockAlign
+    //     (3) MssSound + 24 is the sound byte count
+    //
+    // A fourth read fixes nChannels. The speaker map is indexed by the source channel count:
+    //
+    //     1402c66e5  movzx   edi, word ptr [r14+0Ah]     ; WORD at MssSound + 2
+    //     1402c6723  mov     rcx, [r13+80h]              ; alias->speakerMap
+    //     1402c672c  call    sub_1402828A0               ; channel map chosen by that count
+    //
+    // All four sit where WAVEFORMATEX puts them, and the structure is passed on as a format:
+    //
+    //     1402c6760  lea     rdx, [r14+8]                ; &MssSound
+    //     1402c6766  call    sub_1402C5690               ; creates a voice from it
+    //
+    // The voice is XAudio2's. The calls made on it land on slot 96 SetVolume, slot 168
+    // SubmitSourceBuffer and slot 208 SetFrequencyRatio of IXAudio2SourceVoice, and what it
+    // submits is an XAUDIO2_BUFFER filled from the two fields the loader also uses:
+    //
+    //     1402c68f5  mov     eax, [r14+20h]              ; AudioBytes = MssSound + 24
+    //     1402c6904  mov     rax, [r14+38h]              ; pAudioData = MssSound + 48
+    //     1402c691c  mov     [rsp+20h], 40h              ; XAUDIO2_END_OF_STREAM
+    //
+    // The byte count at +24 is corroborated by Load_MssSound at 0x1401206C0, which takes its
+    // Load_Stream size from [rax+18h].
+    //
+    // The x86 layout describes the same sound to Miles, where the channel count and the block
+    // size are 32 bit and a sample total is carried as well. The two layouts are related by
+    // translation. The six bytes at +18 and the twenty at +28 are unread by everything traced
+    // here.
     struct MssSound
     {
-        AILSOUNDINFO info;
+        uint16_t wFormatTag;
+        uint16_t nChannels;
+        uint32_t nSamplesPerSec;
+        uint32_t nAvgBytesPerSec;
+        uint16_t nBlockAlign;
+        uint16_t wBitsPerSample;
+        uint16_t cbSize;
+        uint8_t unknown_18[6];
+        unsigned int data_len;
+        uint8_t unknown_28[20];
         char* data;
     };
 
