@@ -37,16 +37,30 @@ void ContentWriter::CreateXAssetList(XAssetList& xAssetList, MemoryManager& memo
         xAssetList.stringList.strings = nullptr;
     }
 
-    const auto assetCount = m_zone.m_pools.GetTotalAssetCount();
+    const auto isListed = [](const XAssetInfoGeneric& asset)
+    {
+        return asset.m_type != ASSET_TYPE_XMODEL_SURFS;
+    };
+
+    auto assetCount = 0u;
+    const auto end = m_zone.m_pools.end();
+    for (auto i = m_zone.m_pools.begin(); i != end; ++i)
+    {
+        if (isListed(**i))
+            assetCount++;
+    }
+
     if (assetCount > 0)
     {
         xAssetList.assetCount = static_cast<int>(assetCount);
         xAssetList.assets = memory.Alloc<XAsset>(assetCount);
 
-        const auto end = m_zone.m_pools.end();
         auto index = 0u;
         for (auto i = m_zone.m_pools.begin(); i != end; ++i)
         {
+            if (!isListed(**i))
+                continue;
+
             auto& asset = xAssetList.assets[index++];
             asset.type = static_cast<XAssetType>((*i)->m_type);
             asset.header.data = (*i)->m_ptr;
