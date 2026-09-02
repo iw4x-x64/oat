@@ -1,0 +1,206 @@
+#include "LoaderPhysCollmapIW4MS.h"
+
+#include "PhysCollmap/PhysCollmapCommon.h"
+#include "Utils/Logging/Log.h"
+#include "World/WorldJsonLoadCommon.h"
+
+#include <format>
+#include <iostream>
+#include <nlohmann/json.hpp>
+
+using namespace nlohmann;
+using namespace IW4MS;
+
+namespace
+{
+    class JsonLoader
+    {
+    public:
+        JsonLoader(std::istream& stream, MemoryManager& memory)
+            : m_stream(stream),
+              m_memory(memory)
+        {
+        }
+
+        bool Load(PhysCollmap& physCollmap) const
+        {
+            try
+            {
+                const auto jRoot = json::parse(m_stream);
+                std::string type;
+                std::string game;
+                unsigned version;
+
+                jRoot.at("_type").get_to(type);
+                jRoot.at("_version").get_to(version);
+                jRoot.at("_game").get_to(game);
+
+                if (type != "physcollmap" || version != 1u || game != "iw4")
+                {
+                    con::error("Tried to load physcollmap \"{}\" but did not find expected type physcollmap of version 1 for game iw4", physCollmap.name);
+                    return false;
+                }
+
+                LoadCollmap(jRoot, physCollmap);
+                return true;
+            }
+            catch (const json::exception& e)
+            {
+                con::error("Failed to parse json of physcollmap \"{}\": {}", physCollmap.name, e.what());
+            }
+            catch (const world::LoadException& e)
+            {
+                con::error("Failed to load physcollmap \"{}\": {}", physCollmap.name, e.what());
+            }
+
+            return false;
+        }
+
+    private:
+        void LoadCollmap(const json& jRoot, PhysCollmap& physCollmap) const
+        {
+            const auto& jMass = jRoot.at("mass");
+            world::Vec(jMass.at("centerOfMass"), physCollmap.mass.centerOfMass);
+            world::Vec(jMass.at("momentsOfInertia"), physCollmap.mass.momentsOfInertia);
+            world::Vec(jMass.at("productsOfInertia"), physCollmap.mass.productsOfInertia);
+
+            world::Bounds(jRoot.at("bounds"), physCollmap.bounds);
+
+            const auto& jGeoms = jRoot.at("geoms");
+            physCollmap.count = static_cast<unsigned>(jGeoms.size());
+            physCollmap.geoms = world::Array<PhysGeomInfo>(m_memory,
+                                                           jGeoms,
+                                                           [this](const json& jGeom, PhysGeomInfo& geom)
+                                                           {
+                                                               LoadGeom(jGeom, geom);
+                                                           });
+        }
+
+        void LoadGeom(const json& jGeom, PhysGeomInfo& geom) const
+        {
+            jGeom.at("type").get_to(geom.type);
+            world::ArrayOfSize(jGeom.at("orientation"),
+                               geom.orientation,
+                               [](const json& jAxis, float (&axis)[3])
+                               {
+                                   world::Vec(jAxis, axis);
+                               });
+            world::Bounds(jGeom.at("bounds"), geom.bounds);
+
+            const auto jBrushWrapper = jGeom.find("brushWrapper");
+            if (jBrushWrapper == jGeom.end())
+                return;
+
+            geom.brushWrapper = m_memory.Alloc<BrushWrapper>();
+            LoadBrushWrapper(*jBrushWrapper, *geom.brushWrapper);
+        }
+
+        void LoadBrushWrapper(const json& jBrushWrapper, BrushWrapper& brushWrapper) const
+        {
+            world::Bounds(jBrushWrapper.at("bounds"), brushWrapper.bounds);
+            jBrushWrapper.at("totalEdgeCount").get_to(brushWrapper.totalEdgeCount);
+
+            brushWrapper.planes = world::Array<cplane_s>(m_memory,
+                                                         jBrushWrapper.at("planes"),
+                                                         [](const json& jPlane, cplane_s& plane)
+                                                         {
+                                                             world::Vec(jPlane.at("normal"), plane.normal);
+                                                             jPlane.at("dist").get_to(plane.dist);
+                                                             plane.type = static_cast<char>(jPlane.at("type").get<int>());
+                                                         });
+
+            auto& brush = brushWrapper.brush;
+            jBrushWrapper.at("numsides").get_to(brush.numsides);
+            jBrushWrapper.at("glassPieceIndex").get_to(brush.glassPieceIndex);
+
+            const auto& jPlanes = jBrushWrapper.at("planes");
+            if (jPlanes.size() != brush.numsides)
+                throw world::LoadException(std::format("Collmap brush has {} planes for {} sides", jPlanes.size(), brush.numsides));
+
+            const auto& jSides = jBrushWrapper.at("sides");
+            if (jSides.size() != brush.numsides)
+                throw world::LoadException(std::format("Collmap brush has {} sides instead of {}", jSides.size(), brush.numsides));
+
+            brush.sides =
+                world::Array<cbrushside_t>(m_memory,
+                                           jSides,
+                                           [&brushWrapper](const json& jSide, cbrushside_t& side)
+                                           {
+                                               const auto planeIndex = jSide.at("plane").get<int>();
+                                               if (planeIndex < 0)
+                                                   side.plane = nullptr;
+                                               else if (static_cast<unsigned>(planeIndex) < brushWrapper.brush.numsides)
+                                                   side.plane = &brushWrapper.planes[planeIndex];
+                                               else
+                                                   throw world::LoadException(std::format("Collmap brush side plane {} is out of bounds", planeIndex));
+
+                                               jSide.at("materialNum").get_to(side.materialNum);
+                                               side.firstAdjacentSideOffset = static_cast<char>(jSide.at("firstAdjacentSideOffset").get<int>());
+                                               side.edgeCount = static_cast<char>(jSide.at("edgeCount").get<int>());
+                                           });
+
+            brush.baseAdjacentSide =
+                static_cast<cbrushedge_t*>(world::Base64(m_memory, jBrushWrapper.at("baseAdjacentSide"), static_cast<size_t>(brushWrapper.totalEdgeCount)));
+
+            world::ArrayOfSize(jBrushWrapper.at("axialMaterialNum"),
+                               brush.axialMaterialNum,
+                               [](const json& jSide, int16_t (&materialNum)[3])
+                               {
+                                   world::ArrayOfSize(jSide, materialNum);
+                               });
+            LoadSideBytes(jBrushWrapper.at("firstAdjacentSideOffsets"), brush.firstAdjacentSideOffsets);
+            LoadSideBytes(jBrushWrapper.at("edgeCount"), brush.edgeCount);
+        }
+
+        static void LoadSideBytes(const json& jValues, unsigned char (&values)[2][3])
+        {
+            world::ArrayOfSize(jValues,
+                               values,
+                               [](const json& jSide, unsigned char (&side)[3])
+                               {
+                                   world::ArrayOfSize(jSide, side);
+                               });
+        }
+
+        std::istream& m_stream;
+        MemoryManager& m_memory;
+    };
+
+    class PhysCollmapLoader final : public AssetCreator<AssetPhysCollMap>
+    {
+    public:
+        PhysCollmapLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(phys_collmap::GetJsonFileNameForAssetName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* physCollmap = m_memory.Alloc<PhysCollmap>();
+            physCollmap->name = m_memory.Dup(assetName.c_str());
+
+            const JsonLoader loader(*file.m_stream, m_memory);
+            if (!loader.Load(*physCollmap))
+                return AssetCreationResult::Failure();
+
+            return AssetCreationResult::Success(context.AddAsset<AssetPhysCollMap>(assetName, physCollmap));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+} // namespace
+
+namespace phys_collmap
+{
+    std::unique_ptr<AssetCreator<AssetPhysCollMap>> CreateLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<PhysCollmapLoader>(memory, searchPath);
+    }
+} // namespace phys_collmap

@@ -26,6 +26,7 @@
 #include "Material/LoaderMaterialIW4MS.h"
 #include "Menu/LoaderMenuListIW4MS.h"
 #include "ObjLoading.h"
+#include "PhysCollmap/LoaderPhysCollmapIW4MS.h"
 #include "PhysPreset/GdtLoaderPhysPresetIW4MS.h"
 #include "PhysPreset/RawLoaderPhysPresetIW4MS.h"
 #include "RawFile/LoaderRawFileIW4MS.h"
@@ -102,6 +103,7 @@ namespace
     {
         auto& memory = zone.Memory();
 
+        collection.AddAssetCreator(phys_collmap::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(phys_preset::CreateRawLoaderIW4MS(memory, searchPath, zone));
         collection.AddAssetCreator(phys_preset::CreateGdtLoaderIW4MS(memory, gdt, zone));
         collection.AddAssetCreator(xanim::CreateLoaderIW4MS(memory, searchPath, zone));
