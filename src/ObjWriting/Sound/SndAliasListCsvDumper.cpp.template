@@ -5,6 +5,10 @@
 #set WRITER_HEADER "\"SndAliasListCsvDumper" + GAME + ".h\""
 #set FLAGS_HEADER "\"Game/" + GAME + "/Sound/SoundAliasFlags" + GAME + ".h\""
 
+#if GAME == "IW4MS"
+#define FEATURE_IW4MS
+#endif
+
 // This file was templated.
 // See SndAliasListCsvDumper.cpp.template.
 // Do not modify, changes will be lost.
@@ -12,9 +16,12 @@
 #include WRITER_HEADER
 
 #include "Csv/CsvStream.h"
+#include "Dumping/ReferencedAssetName.h"
 #include FLAGS_HEADER
+#include "Sound/SoundAliasCommon.h"
 
 #include <format>
+#include <string>
 
 using namespace GAME;
 
@@ -52,6 +59,14 @@ namespace
         "envelop_max",
         "envelop percentage",
         "velocity_min",
+
+        "master percentage",
+        "unknown flags",
+        "speakermap default",
+        "speakermap mono 2speaker",
+        "speakermap mono 6speaker",
+        "speakermap stereo 2speaker",
+        "speakermap stereo 6speaker",
     };
 
     class Dumper
@@ -94,7 +109,7 @@ namespace
                 return "";
 
             if (soundFile->type == SAT_LOADED)
-                return soundFile->u.loadSnd ? Str(soundFile->u.loadSnd->name) : "";
+                return soundFile->u.loadSnd ? dumping::ReferencedAssetName(soundFile->u.loadSnd->name) : "";
 
             const auto dir = Str(soundFile->u.streamSnd.dir);
             const auto name = Str(soundFile->u.streamSnd.name);
@@ -137,7 +152,7 @@ namespace
             m_csv.WriteColumn(Str(alias.secondaryAliasName));
             m_csv.WriteColumn(Str(alias.chainAliasName));
             m_csv.WriteColumn(Str(alias.mixerGroup));
-            m_csv.WriteColumn(alias.volumeFalloffCurve ? Str(alias.volumeFalloffCurve->filename) : "");
+            m_csv.WriteColumn(alias.volumeFalloffCurve ? dumping::ReferencedAssetName(alias.volumeFalloffCurve->filename) : "");
             m_csv.WriteColumn(Num(alias.startDelay));
             m_csv.WriteColumn(alias.speakerMap ? Str(alias.speakerMap->name) : "");
 
@@ -151,8 +166,58 @@ namespace
             m_csv.WriteColumn(Num(alias.envelopPercentage));
             m_csv.WriteColumn(Num(alias.velocityMin));
 
+            m_csv.WriteColumn(Num(alias.masterPercentage));
+
+            const auto unrecovered = static_cast<uint32_t>(alias.flags) & snd_alias_flags::UNRECOVERED_MASK;
+            m_csv.WriteColumn(unrecovered ? std::format("{:#x}", unrecovered) : "");
+
+            WriteSpeakerMap(alias);
+
             m_csv.NextRow();
         }
+
+#ifdef FEATURE_IW4MS
+        void WriteSpeakerMap(const snd_alias_t& alias)
+        {
+            if (!alias.speakerMap)
+            {
+                for (auto i = 0u; i < 5u; i++)
+                    m_csv.WriteColumn("");
+                return;
+            }
+
+            m_csv.WriteColumn(alias.speakerMap->isDefault ? "1" : "0");
+
+            for (const auto& channelMap : alias.speakerMap->channelMaps)
+            {
+                for (const auto& speakers : channelMap.speakers)
+                    m_csv.WriteColumn(SpeakerLevels(speakers));
+            }
+        }
+
+        [[nodiscard]] static std::string SpeakerLevels(const MSSSpeakerLevels& speakers)
+        {
+            std::string result;
+
+            for (auto i = 0u; i < static_cast<unsigned char>(speakers.levelCount) && speakers.levels; i++)
+            {
+                const auto& level = speakers.levels[i];
+
+                if (!result.empty())
+                    result += ' ';
+
+                result += std::format("{}:{}:{}", static_cast<int>(level.channel), static_cast<int>(level.speaker), Num(level.gain));
+            }
+
+            return result;
+        }
+#else
+        void WriteSpeakerMap([[maybe_unused]] const snd_alias_t& alias)
+        {
+            for (auto i = 0u; i < 5u; i++)
+                m_csv.WriteColumn("");
+        }
+#endif
 
         CsvOutputStream m_csv;
     };
@@ -164,7 +229,7 @@ namespace sound
 {
     void CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetSound::Type>& asset)
     {
-        const auto assetFile = context.OpenAssetFile(std::format("soundaliases/{}.csv", asset.m_name));
+        const auto assetFile = context.OpenAssetFile(sound::GetSoundAliasCsvFileNameForAssetName(asset.m_name));
 
         if (!assetFile)
             return;

@@ -1,0 +1,508 @@
+#include "LoaderSoundAliasIW4MS.h"
+
+#include "Csv/CsvHeaderRow.h"
+#include "Csv/CsvStream.h"
+#include "Game/IW4MS/Sound/SoundAliasFlagsIW4MS.h"
+#include "Sound/SoundAliasCommon.h"
+#include "Utils/Logging/Log.h"
+
+#include <algorithm>
+#include <charconv>
+#include <cstdint>
+#include <format>
+#include <optional>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+using namespace IW4MS;
+
+namespace
+{
+    enum class Column
+    {
+        NAME,
+        SEQUENCE,
+        FILE,
+        VOL_MIN,
+        VOL_MAX,
+        PITCH_MIN,
+        PITCH_MAX,
+        DIST_MIN,
+        DIST_MAX,
+        CHANNEL,
+        TYPE,
+        PROBABILITY,
+        LOOP,
+        MASTER_SLAVE,
+        SUBTITLE,
+        SECONDARY_ALIAS_NAME,
+        CHAIN_ALIAS_NAME,
+        MIXER_GROUP,
+        VOLUME_FALLOFF_CURVE,
+        START_DELAY,
+        SPEAKER_MAP,
+        REVERB,
+        LFE_PERCENTAGE,
+        CENTER_PERCENTAGE,
+        ENVELOP_MIN,
+        ENVELOP_MAX,
+        ENVELOP_PERCENTAGE,
+        VELOCITY_MIN,
+        MASTER_PERCENTAGE,
+        UNKNOWN_FLAGS,
+        SPEAKER_MAP_DEFAULT,
+        SPEAKER_MAP_MONO_2,
+        SPEAKER_MAP_MONO_6,
+        SPEAKER_MAP_STEREO_2,
+        SPEAKER_MAP_STEREO_6,
+
+        COUNT
+    };
+
+    constexpr const char* COLUMN_NAMES[]{
+        "name",
+        "sequence",
+        "file",
+        "vol_min",
+        "vol_max",
+        "pitch_min",
+        "pitch_max",
+        "dist_min",
+        "dist_max",
+        "channel",
+        "type",
+        "probability",
+        "loop",
+        "masterslave",
+        "subtitle",
+        "secondaryaliasname",
+        "chainaliasname",
+        "mixergroup",
+        "volumefalloffcurve",
+        "startdelay",
+        "speakermap",
+        "reverb",
+        "lfe percentage",
+        "center percentage",
+        "envelop_min",
+        "envelop_max",
+        "envelop percentage",
+        "velocity_min",
+        "master percentage",
+        "unknown flags",
+        "speakermap default",
+        "speakermap mono 2speaker",
+        "speakermap mono 6speaker",
+        "speakermap stereo 2speaker",
+        "speakermap stereo 6speaker",
+    };
+    static_assert(std::extent_v<decltype(COLUMN_NAMES)> == static_cast<unsigned>(Column::COUNT));
+
+    class SoundAliasLoader
+    {
+    public:
+        SoundAliasLoader(MemoryManager& memory, AssetCreationContext& context, AssetRegistration<AssetSound>& registration)
+            : m_memory(memory),
+              m_context(context),
+              m_registration(registration)
+        {
+        }
+
+        bool Load(const SearchPathOpenFile& file, snd_alias_list_t& aliasList, std::unordered_map<std::string, SpeakerMap*>& speakerMaps)
+        {
+            const CsvInputStream csv(*file.m_stream);
+
+            CsvHeaderRow headers;
+            if (!headers.Read(csv))
+            {
+                con::error("Sound alias list \"{}\" has no header row", aliasList.aliasName);
+                return false;
+            }
+
+            for (auto i = 0u; i < static_cast<unsigned>(Column::COUNT); i++)
+                m_columns[i] = headers.GetIndexForHeader(COLUMN_NAMES[i]);
+
+            std::vector<snd_alias_t> aliases;
+            std::vector<CsvCell> row;
+            while (csv.NextRow(row))
+            {
+                if (row.empty())
+                    continue;
+
+                snd_alias_t alias{};
+                if (!LoadAlias(row, alias, speakerMaps))
+                    return false;
+
+                aliases.emplace_back(alias);
+            }
+
+            aliasList.count = static_cast<int>(aliases.size());
+            if (!aliases.empty())
+            {
+                aliasList.head = m_memory.Alloc<snd_alias_t>(aliases.size());
+                std::ranges::copy(aliases, aliasList.head);
+            }
+
+            return true;
+        }
+
+    private:
+        [[nodiscard]] const std::string* Value(const std::vector<CsvCell>& row, const Column column) const
+        {
+            const auto index = m_columns[static_cast<unsigned>(column)];
+            if (!index || *index >= row.size())
+                return nullptr;
+
+            const auto& value = row[*index].m_value;
+
+            return value.empty() ? nullptr : &value;
+        }
+
+        [[nodiscard]] const char* String(const std::vector<CsvCell>& row, const Column column) const
+        {
+            const auto* value = Value(row, column);
+
+            return value ? m_memory.Dup(value->c_str()) : nullptr;
+        }
+
+        [[nodiscard]] float Float(const std::vector<CsvCell>& row, const Column column) const
+        {
+            const auto* value = Value(row, column);
+            if (!value)
+                return 0.0f;
+
+            float result = 0.0f;
+            std::from_chars(value->data(), value->data() + value->size(), result);
+
+            return result;
+        }
+
+        [[nodiscard]] int Int(const std::vector<CsvCell>& row, const Column column) const
+        {
+            const auto* value = Value(row, column);
+            if (!value)
+                return 0;
+
+            int result = 0;
+            std::from_chars(value->data(), value->data() + value->size(), result);
+
+            return result;
+        }
+
+        [[nodiscard]] unsigned Hex(const std::vector<CsvCell>& row, const Column column) const
+        {
+            const auto* value = Value(row, column);
+            if (!value)
+                return 0u;
+
+            const auto* begin = value->data();
+            const auto* end = value->data() + value->size();
+            auto base = 10;
+            if (value->size() > 2u && begin[0] == '0' && (begin[1] == 'x' || begin[1] == 'X'))
+            {
+                begin += 2;
+                base = 16;
+            }
+
+            unsigned result = 0u;
+            std::from_chars(begin, end, result, base);
+
+            return result;
+        }
+
+        bool LoadAlias(const std::vector<CsvCell>& row, snd_alias_t& alias, std::unordered_map<std::string, SpeakerMap*>& speakerMaps)
+        {
+            alias.aliasName = String(row, Column::NAME);
+            alias.subtitle = String(row, Column::SUBTITLE);
+            alias.secondaryAliasName = String(row, Column::SECONDARY_ALIAS_NAME);
+            alias.chainAliasName = String(row, Column::CHAIN_ALIAS_NAME);
+            alias.mixerGroup = String(row, Column::MIXER_GROUP);
+
+            alias.sequence = Int(row, Column::SEQUENCE);
+            alias.volMin = Float(row, Column::VOL_MIN);
+            alias.volMax = Float(row, Column::VOL_MAX);
+            alias.pitchMin = Float(row, Column::PITCH_MIN);
+            alias.pitchMax = Float(row, Column::PITCH_MAX);
+            alias.distMin = Float(row, Column::DIST_MIN);
+            alias.distMax = Float(row, Column::DIST_MAX);
+            alias.velocityMin = Float(row, Column::VELOCITY_MIN);
+            alias.masterPercentage = Float(row, Column::MASTER_PERCENTAGE);
+            alias.probability = Float(row, Column::PROBABILITY);
+            alias.lfePercentage = Float(row, Column::LFE_PERCENTAGE);
+            alias.centerPercentage = Float(row, Column::CENTER_PERCENTAGE);
+            alias.startDelay = Int(row, Column::START_DELAY);
+            alias.envelopMin = Float(row, Column::ENVELOP_MIN);
+            alias.envelopMax = Float(row, Column::ENVELOP_MAX);
+            alias.envelopPercentage = Float(row, Column::ENVELOP_PERCENTAGE);
+
+            alias.flags = LoadFlags(row);
+
+            return LoadSoundFile(row, alias) && LoadVolumeFalloffCurve(row, alias) && LoadSpeakerMap(row, alias, speakerMaps);
+        }
+
+        [[nodiscard]] int LoadFlags(const std::vector<CsvCell>& row) const
+        {
+            using namespace snd_alias_flags;
+
+            auto flags = Hex(row, Column::UNKNOWN_FLAGS) & UNRECOVERED_MASK;
+
+            flags |= (static_cast<uint32_t>(Int(row, Column::CHANNEL)) & CHANNEL_MASK) << CHANNEL_SHIFT;
+
+            const auto* loop = Value(row, Column::LOOP);
+            if (loop && *loop == "looping")
+                flags |= LOOPING;
+
+            const auto* masterSlave = Value(row, Column::MASTER_SLAVE);
+            if (masterSlave && *masterSlave == "master")
+                flags |= MASTER_SLAVE;
+
+            const auto* reverb = Value(row, Column::REVERB);
+            if (reverb)
+            {
+                if (reverb->find("nowetlevel") != std::string::npos)
+                    flags |= REVERB_NO_WET_LEVEL;
+                if (reverb->find("fulldrylevel") != std::string::npos)
+                    flags |= REVERB_FULL_DRY_LEVEL;
+            }
+
+            return static_cast<int>(flags);
+        }
+
+        bool LoadSoundFile(const std::vector<CsvCell>& row, snd_alias_t& alias)
+        {
+            const auto* fileName = Value(row, Column::FILE);
+            if (!fileName)
+            {
+                alias.soundFile = nullptr;
+                return true;
+            }
+
+            const auto* type = Value(row, Column::TYPE);
+            const auto streamed = type && *type == "streamed";
+
+            auto* soundFile = m_memory.Alloc<SoundFile>();
+            soundFile->type = streamed ? SAT_STREAMED : SAT_LOADED;
+            soundFile->exists = 1;
+
+            if (streamed)
+            {
+                const auto separator = fileName->rfind('/');
+                if (separator != std::string::npos)
+                {
+                    soundFile->u.streamSnd.dir = m_memory.Dup(fileName->substr(0, separator).c_str());
+                    soundFile->u.streamSnd.name = m_memory.Dup(fileName->substr(separator + 1u).c_str());
+                }
+                else
+                {
+                    soundFile->u.streamSnd.dir = nullptr;
+                    soundFile->u.streamSnd.name = m_memory.Dup(fileName->c_str());
+                }
+            }
+            else
+            {
+                auto* loadedSound = m_context.LoadDependency<AssetLoadedSound>(*fileName);
+                if (!loadedSound)
+                {
+                    con::error("Could not find loaded sound \"{}\" of sound alias", *fileName);
+                    return false;
+                }
+
+                m_registration.AddDependency(loadedSound);
+                soundFile->u.loadSnd = loadedSound->Asset();
+            }
+
+            alias.soundFile = soundFile;
+
+            return true;
+        }
+
+        bool LoadVolumeFalloffCurve(const std::vector<CsvCell>& row, snd_alias_t& alias)
+        {
+            const auto* curveName = Value(row, Column::VOLUME_FALLOFF_CURVE);
+            if (!curveName)
+            {
+                alias.volumeFalloffCurve = nullptr;
+                return true;
+            }
+
+            auto* curve = m_context.LoadDependency<AssetSoundCurve>(*curveName);
+            if (!curve)
+            {
+                con::error("Could not find sound curve \"{}\" of sound alias", *curveName);
+                return false;
+            }
+
+            m_registration.AddDependency(curve);
+            alias.volumeFalloffCurve = curve->Asset();
+
+            return true;
+        }
+
+        bool LoadSpeakerMap(const std::vector<CsvCell>& row, snd_alias_t& alias, std::unordered_map<std::string, SpeakerMap*>& speakerMaps)
+        {
+            static constexpr Column LEVEL_COLUMNS[]{
+                Column::SPEAKER_MAP_MONO_2,
+                Column::SPEAKER_MAP_MONO_6,
+                Column::SPEAKER_MAP_STEREO_2,
+                Column::SPEAKER_MAP_STEREO_6,
+            };
+
+            const auto* isDefault = Value(row, Column::SPEAKER_MAP_DEFAULT);
+            if (!isDefault)
+            {
+                alias.speakerMap = nullptr;
+                return true;
+            }
+
+            const auto* name = Value(row, Column::SPEAKER_MAP);
+
+            auto key = name ? *name : std::string();
+            key += '|';
+            key += *isDefault;
+            for (const auto column : LEVEL_COLUMNS)
+            {
+                key += '|';
+                const auto* levels = Value(row, column);
+                if (levels)
+                    key += *levels;
+            }
+
+            const auto existing = speakerMaps.find(key);
+            if (existing != speakerMaps.end())
+            {
+                alias.speakerMap = existing->second;
+                return true;
+            }
+
+            auto* speakerMap = m_memory.Alloc<SpeakerMap>();
+            speakerMap->isDefault = *isDefault != "0";
+            speakerMap->name = name ? m_memory.Dup(name->c_str()) : nullptr;
+
+            for (auto i = 0u; i < std::extent_v<decltype(LEVEL_COLUMNS)>; i++)
+            {
+                auto& speakers = speakerMap->channelMaps[i / 2u].speakers[i % 2u];
+                if (!LoadSpeakerLevels(Value(row, LEVEL_COLUMNS[i]), speakers))
+                    return false;
+            }
+
+            speakerMaps.emplace(std::move(key), speakerMap);
+            alias.speakerMap = speakerMap;
+
+            return true;
+        }
+
+        bool LoadSpeakerLevels(const std::string* value, MSSSpeakerLevels& speakers) const
+        {
+            if (!value)
+            {
+                speakers.levelCount = 0u;
+                speakers.levels = nullptr;
+                return true;
+            }
+
+            std::vector<MSSSpeakerLevel> levels;
+            for (size_t offset = 0u; offset < value->size();)
+            {
+                const auto end = std::min(value->find(' ', offset), value->size());
+
+                unsigned channel;
+                unsigned speaker;
+                float gain;
+                if (!ParseLevel(std::string_view(*value).substr(offset, end - offset), channel, speaker, gain))
+                {
+                    con::error("Could not read speaker level \"{}\" of sound alias", *value);
+                    return false;
+                }
+
+                MSSSpeakerLevel& newLevel = levels.emplace_back();
+                newLevel.channel = static_cast<unsigned char>(channel);
+                newLevel.speaker = static_cast<unsigned char>(speaker);
+                newLevel.gain = gain;
+                offset = end + 1u;
+            }
+
+            speakers.levelCount = static_cast<unsigned char>(levels.size());
+            if (!levels.empty())
+            {
+                speakers.levels = m_memory.Alloc<MSSSpeakerLevel>(levels.size());
+                std::ranges::copy(levels, speakers.levels);
+            }
+
+            return true;
+        }
+
+        static bool ParseLevel(const std::string_view level, unsigned& channel, unsigned& speaker, float& gain)
+        {
+            const auto firstSeparator = level.find(':');
+            if (firstSeparator == std::string_view::npos)
+                return false;
+
+            const auto secondSeparator = level.find(':', firstSeparator + 1u);
+            if (secondSeparator == std::string_view::npos)
+                return false;
+
+            const auto readUnsigned = [](const std::string_view text, unsigned& out)
+            {
+                const auto result = std::from_chars(text.data(), text.data() + text.size(), out);
+                return result.ec == std::errc() && result.ptr == text.data() + text.size();
+            };
+
+            const auto gainText = level.substr(secondSeparator + 1u);
+            const auto gainResult = std::from_chars(gainText.data(), gainText.data() + gainText.size(), gain);
+
+            return readUnsigned(level.substr(0u, firstSeparator), channel)
+                   && readUnsigned(level.substr(firstSeparator + 1u, secondSeparator - firstSeparator - 1u), speaker) && gainResult.ec == std::errc()
+                   && gainResult.ptr == gainText.data() + gainText.size();
+        }
+
+        MemoryManager& m_memory;
+        AssetCreationContext& m_context;
+        AssetRegistration<AssetSound>& m_registration;
+        std::optional<unsigned> m_columns[static_cast<unsigned>(Column::COUNT)];
+    };
+
+    class SoundLoader final : public AssetCreator<AssetSound>
+    {
+    public:
+        SoundLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(sound::GetSoundAliasCsvFileNameForAssetName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* aliasList = m_memory.Alloc<snd_alias_list_t>();
+            aliasList->aliasName = m_memory.Dup(assetName.c_str());
+
+            AssetRegistration<AssetSound> registration(assetName, aliasList);
+
+            SoundAliasLoader loader(m_memory, context, registration);
+            if (!loader.Load(file, *aliasList, m_speaker_maps))
+            {
+                con::error("Failed to load sound alias list \"{}\"", assetName);
+                return AssetCreationResult::Failure();
+            }
+
+            return AssetCreationResult::Success(context.AddAsset(std::move(registration)));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+        std::unordered_map<std::string, SpeakerMap*> m_speaker_maps;
+    };
+} // namespace
+
+namespace sound
+{
+    std::unique_ptr<AssetCreator<AssetSound>> CreateSoundAliasLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<SoundLoader>(memory, searchPath);
+    }
+} // namespace sound
