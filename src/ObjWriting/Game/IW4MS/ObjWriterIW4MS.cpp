@@ -28,6 +28,7 @@
 #include "Menu/MenuDumperIW4MS.h"
 #include "Menu/MenuListDumperIW4MS.h"
 #include "PhysCollmap/PhysCollmapDumperIW4MS.h"
+#include "PhysCollmap/PhysCollmapJsonDumperIW4MS.h"
 #include "PhysPreset/PhysPresetInfoStringDumperIW4MS.h"
 #include "RawFile/RawFileDumperIW4MS.h"
 #include "Sound/LoadedSoundDumperIW4MS.h"
@@ -52,6 +53,7 @@ void ObjWriter::RegisterAssetDumpers([[maybe_unused]] AssetDumpingContext& conte
     RegisterAssetDumper(std::make_unique<world::ClipMapMpJsonDumperIW4MS>());
     RegisterAssetDumper(std::make_unique<world::GfxWorldJsonDumperIW4MS>());
     RegisterAssetDumper(std::make_unique<phys_collmap::DumperIW4MS>());
+    RegisterAssetDumper(std::make_unique<phys_collmap::JsonDumperIW4MS>());
     RegisterAssetDumper(std::make_unique<xanim::DumperIW4MS>());
     RegisterAssetDumper(std::make_unique<xmodel::DumperIW4MS>());
     RegisterAssetDumper(std::make_unique<material::JsonDumperIW4MS>());
