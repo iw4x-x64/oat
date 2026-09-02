@@ -35,6 +35,7 @@
 #include "Weapon/RawLoaderWeaponIW4MS.h"
 #include "World/LoaderComWorldIW4MS.h"
 #include "World/LoaderFxWorldIW4MS.h"
+#include "World/LoaderGameWorldIW4MS.h"
 
 #include <memory>
 #endif // ARCH_x64
@@ -124,6 +125,8 @@ namespace
         collection.AddAssetCreator(structured_data_def::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(world::CreateComWorldLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(world::CreateFxWorldLoaderIW4MS(memory, searchPath));
+        collection.AddAssetCreator(world::CreateGameWorldSpLoaderIW4MS(memory, searchPath, zone));
+        collection.AddAssetCreator(world::CreateGameWorldMpLoaderIW4MS(memory, searchPath));
 
         collection.AddSubAssetCreator(weapon::CreateAccuracyGraphLoaderIW4MS(memory, searchPath));
     }
