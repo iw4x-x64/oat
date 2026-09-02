@@ -33,6 +33,7 @@
 #include "PhysPreset/RawLoaderPhysPresetIW4MS.h"
 #include "RawFile/LoaderRawFileIW4MS.h"
 #include "Sound/LoaderLoadedSoundIW4MS.h"
+#include "Sound/LoaderSoundAliasIW4MS.h"
 #include "Sound/LoaderSoundCurveIW4MS.h"
 #include "StringTable/LoaderStringTableIW4MS.h"
 #include "StructuredDataDef/LoaderStructuredDataDefIW4MS.h"
@@ -121,6 +122,7 @@ namespace
         collection.AddAssetCreator(material::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(sound_curve::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(sound::CreateLoadedSoundLoaderIW4MS(memory, searchPath));
+        collection.AddAssetCreator(sound::CreateSoundAliasLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(fx::CreateEfxLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(fx::CreateImpactFxLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(map_ents::CreateLoaderIW4MS(memory, searchPath));

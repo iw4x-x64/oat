@@ -104,7 +104,7 @@ from this table.
 | MaterialVertexDeclaration | ✅               | ✅               | Dumped as JSON. No source format exists for it.                                |
 | MaterialTechniqueSet      | ✅               | ✅               |                                                                                |
 | GfxImage                  | ✅               | ✅               | Includes the wavelet formats, which no other target decodes yet.               |
-| snd_alias_list_t          | ✅               | ❌               | Dumped as CSV. Some `flags` bits are still unidentified, see Q-010.            |
+| snd_alias_list_t          | ✅               | ✅               | CSV. Columns were added for what the game columns have no room for.            |
 | SndCurve                  | ✅               | ✅               |                                                                                |
 | LoadedSound               | ✅               | ✅               |                                                                                |
 | clipMap_t                 | ✅               | ✅               | JSON. Compiled map output: a `.map` compiles into it and cannot be recovered. |
