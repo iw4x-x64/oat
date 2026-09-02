@@ -22,6 +22,7 @@
 #include "Leaderboard/LoaderLeaderboardIW4MS.h"
 #include "LightDef/LightDefLoaderIW4MS.h"
 #include "Localize/LoaderLocalizeIW4MS.h"
+#include "Maps/LoaderMapEntsIW4MS.h"
 #include "Material/LoaderMaterialIW4MS.h"
 #include "Menu/LoaderMenuListIW4MS.h"
 #include "ObjLoading.h"
@@ -116,6 +117,8 @@ namespace
         collection.AddAssetCreator(material::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(sound_curve::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(sound::CreateLoadedSoundLoaderIW4MS(memory, searchPath));
+        collection.AddAssetCreator(map_ents::CreateLoaderIW4MS(memory, searchPath));
+        collection.AddAssetCreator(addon_map_ents::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(light_def::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(menu::CreateMenuListLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(localize::CreateLoaderIW4MS(memory, searchPath, zone));

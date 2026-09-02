@@ -111,7 +111,7 @@ from this table.
 | ComWorld                  | ✅               | ✅               | JSON, as above.                                                                |
 | GameWorldSp               | ✅               | ✅               | JSON, as above.                                                                |
 | GameWorldMp               | ✅               | ✅               | JSON, as above.                                                                |
-| MapEnts                   | ⁉️               | ❌               | Entity string can be exported. Binary data currently not.                      |
+| MapEnts                   | ✅               | ✅               | Entity string as `.ents`, trigger volumes and stages as json beside it.        |
 | FxWorld                   | ✅               | ✅               | JSON, as above.                                                                |
 | GfxWorld                  | ✅               | ❌               | JSON, as above.                                                                |
 | GfxLightDef               | ✅               | ✅               |                                                                                |
@@ -128,7 +128,7 @@ from this table.
 | StructuredDataDefSet      | ✅               | ✅               | The format is custom due to lacking information about original format.         |
 | TracerDef                 | ✅               | ✅               |                                                                                |
 | VehicleDef                | ✅               | ✅               |                                                                                |
-| AddonMapEnts              | ⁉️              | ❌                | MapEnts String can be exported. Binary data currently not.                     |
+| AddonMapEnts              | ✅               | ✅               | Entity string, trigger volumes as json beside it.                              |
 
 ## IW5 (Call of Duty: Modern Warfare 3)
 

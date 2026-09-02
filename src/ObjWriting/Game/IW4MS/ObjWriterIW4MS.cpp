@@ -24,6 +24,7 @@
 #include "LightDef/LightDefDumperIW4MS.h"
 #include "Localize/LocalizeDumperIW4MS.h"
 #include "Maps/AddonMapEntsDumperIW4MS.h"
+#include "Maps/MapEntsJsonDumperIW4MS.h"
 #include "Menu/MenuDumperIW4MS.h"
 #include "Menu/MenuListDumperIW4MS.h"
 #include "PhysCollmap/PhysCollmapDumperIW4MS.h"
@@ -62,6 +63,7 @@ void ObjWriter::RegisterAssetDumpers([[maybe_unused]] AssetDumpingContext& conte
     RegisterAssetDumper(std::make_unique<sound_curve::DumperIW4MS>());
     RegisterAssetDumper(std::make_unique<sound::LoadedSoundDumperIW4MS>());
     RegisterAssetDumper(std::make_unique<map_ents::DumperIW4MS>());
+    RegisterAssetDumper(std::make_unique<map_ents::JsonDumperIW4MS>());
     RegisterAssetDumper(std::make_unique<light_def::DumperIW4MS>());
     RegisterAssetDumper(std::make_unique<font::JsonDumperIW4MS>());
     RegisterAssetDumper(std::make_unique<menu::MenuListDumperIW4MS>());

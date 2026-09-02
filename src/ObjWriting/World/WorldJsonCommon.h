@@ -47,6 +47,14 @@ namespace world
                      });
     }
 
+    template<typename BoundsType> [[nodiscard]] nlohmann::json Bounds(const BoundsType& bounds)
+    {
+        return nlohmann::json{
+            {"midPoint", Vec3(bounds.midPoint.v)},
+            {"halfSize", Vec3(bounds.halfSize.v)},
+        };
+    }
+
     [[nodiscard]] inline nlohmann::json Base64(const void* data, const size_t size)
     {
         if (!data || !size)
