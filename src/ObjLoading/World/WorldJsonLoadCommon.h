@@ -73,6 +73,12 @@ namespace world
                     });
     }
 
+    template<typename BoundsType> void Bounds(const nlohmann::json& jBounds, BoundsType& bounds)
+    {
+        Vec(jBounds.at("midPoint"), bounds.midPoint.v);
+        Vec(jBounds.at("halfSize"), bounds.halfSize.v);
+    }
+
     [[nodiscard]] inline void* Base64(MemoryManager& memory, const nlohmann::json& jData, const size_t expectedSize)
     {
         const auto& encoded = jData.get_ref<const std::string&>();

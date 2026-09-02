@@ -1,0 +1,193 @@
+#include "LoaderMapEntsIW4MS.h"
+
+#include "MapTriggersJsonIW4MS.h"
+#include "Maps/MapEntsCommon.h"
+#include "Utils/Logging/Log.h"
+#include "World/WorldJsonLoadCommon.h"
+
+#include <iostream>
+#include <nlohmann/json.hpp>
+
+using namespace nlohmann;
+using namespace IW4MS;
+
+namespace
+{
+    bool LoadEntityString(const SearchPathOpenFile& file, char*& entityString, int& numEntityChars, MemoryManager& memory)
+    {
+        const auto stringLength = static_cast<size_t>(file.m_length);
+        auto* buffer = memory.Alloc<char>(stringLength + 1u);
+
+        file.m_stream->read(buffer, file.m_length);
+        if (file.m_stream->gcount() != file.m_length)
+            return false;
+
+        buffer[stringLength] = '\0';
+
+        entityString = buffer;
+        numEntityChars = static_cast<int>(stringLength + 1u);
+
+        return true;
+    }
+
+    bool LoadTriggerFile(ISearchPath& searchPath, const std::string& fileName, const std::string& expectedType, const std::string& assetName, const auto& load)
+    {
+        const auto file = searchPath.Open(fileName);
+        if (!file.IsOpen())
+            return true;
+
+        try
+        {
+            const auto jRoot = json::parse(*file.m_stream);
+            std::string type;
+            std::string game;
+            unsigned version;
+
+            jRoot.at("_type").get_to(type);
+            jRoot.at("_version").get_to(version);
+            jRoot.at("_game").get_to(game);
+
+            if (type != expectedType || version != 1u || game != "iw4")
+            {
+                con::error("Tried to load \"{}\" but did not find expected type {} of version 1 for game iw4", fileName, expectedType);
+                return false;
+            }
+
+            load(jRoot);
+            return true;
+        }
+        catch (const json::exception& e)
+        {
+            con::error("Failed to parse json of {} \"{}\": {}", expectedType, assetName, e.what());
+        }
+        catch (const world::LoadException& e)
+        {
+            con::error("Failed to load {} \"{}\": {}", expectedType, assetName, e.what());
+        }
+
+        return false;
+    }
+
+    class MapEntsLoader final : public AssetCreator<AssetMapEnts>
+    {
+    public:
+        MapEntsLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(map_ents::GetEntsFileNameForAssetName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* mapEnts = m_memory.Alloc<MapEnts>();
+            mapEnts->name = m_memory.Dup(assetName.c_str());
+
+            if (!LoadEntityString(file, mapEnts->entityString, mapEnts->numEntityChars, m_memory))
+            {
+                con::error("Failed to read entity string of mapents \"{}\"", assetName);
+                return AssetCreationResult::Failure();
+            }
+
+            if (!LoadTriggerFile(m_search_path,
+                                 map_ents::GetTriggersFileNameForAssetName(assetName),
+                                 "mapents",
+                                 assetName,
+                                 [this, mapEnts](const json& jRoot)
+                                 {
+                                     LoadTriggersAndStages(jRoot, *mapEnts);
+                                 }))
+            {
+                return AssetCreationResult::Failure();
+            }
+
+            return AssetCreationResult::Success(context.AddAsset<AssetMapEnts>(assetName, mapEnts));
+        }
+
+    private:
+        void LoadTriggersAndStages(const json& jRoot, MapEnts& mapEnts) const
+        {
+            map_ents::LoadTriggersJsonIW4MS(jRoot.at("trigger"), mapEnts.trigger, m_memory);
+
+            const auto& jStages = jRoot.at("stages");
+            mapEnts.stageCount = static_cast<char>(jStages.size());
+            mapEnts.stages = world::Array<Stage>(m_memory,
+                                                 jStages,
+                                                 [this](const json& jStage, Stage& stage)
+                                                 {
+                                                     const auto& name = jStage.at("name").get_ref<const std::string&>();
+                                                     stage.name = !name.empty() ? m_memory.Dup(name.c_str()) : nullptr;
+
+                                                     world::Vec(jStage.at("origin"), stage.origin);
+                                                     jStage.at("triggerIndex").get_to(stage.triggerIndex);
+                                                     stage.sunPrimaryLightIndex = static_cast<char>(jStage.at("sunPrimaryLightIndex").get<int>());
+                                                 });
+        }
+
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+
+    class AddonMapEntsLoader final : public AssetCreator<AssetAddonMapEnts>
+    {
+    public:
+        AddonMapEntsLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(addon_map_ents::GetEntsFileNameForAssetName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* addonMapEnts = m_memory.Alloc<AddonMapEnts>();
+            addonMapEnts->name = m_memory.Dup(assetName.c_str());
+
+            if (!LoadEntityString(file, addonMapEnts->entityString, addonMapEnts->numEntityChars, m_memory))
+            {
+                con::error("Failed to read entity string of addonmapents \"{}\"", assetName);
+                return AssetCreationResult::Failure();
+            }
+
+            if (!LoadTriggerFile(m_search_path,
+                                 addon_map_ents::GetTriggersFileNameForAssetName(assetName),
+                                 "addonmapents",
+                                 assetName,
+                                 [this, addonMapEnts](const json& jRoot)
+                                 {
+                                     map_ents::LoadTriggersJsonIW4MS(jRoot.at("trigger"), addonMapEnts->trigger, m_memory);
+                                 }))
+            {
+                return AssetCreationResult::Failure();
+            }
+
+            return AssetCreationResult::Success(context.AddAsset<AssetAddonMapEnts>(assetName, addonMapEnts));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+} // namespace
+
+namespace map_ents
+{
+    std::unique_ptr<AssetCreator<AssetMapEnts>> CreateLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<MapEntsLoader>(memory, searchPath);
+    }
+} // namespace map_ents
+
+namespace addon_map_ents
+{
+    std::unique_ptr<AssetCreator<AssetAddonMapEnts>> CreateLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<AddonMapEntsLoader>(memory, searchPath);
+    }
+} // namespace addon_map_ents
