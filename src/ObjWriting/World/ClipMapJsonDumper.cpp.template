@@ -14,6 +14,7 @@
 #include WRITER_HEADER
 
 #include "Dumping/AssetDumpingContext.h"
+#include "World/WorldCommon.h"
 #include "World/WorldJsonCommon.h"
 
 #include <cstdint>
@@ -153,17 +154,15 @@ namespace
                                                static_cast<size_t>(clipMap.partitionCount),
                                                [&clipMap](const CollisionPartition& partition)
                                                {
-                                                   json jPartition{
+                                                   const auto firstBorder = IndexInto(partition.borders, clipMap.borders);
+
+                                                   return json{
                                                        {"triCount", static_cast<int>(partition.triCount)},
                                                        {"borderCount", static_cast<int>(partition.borderCount)},
                                                        {"firstVertSegment", static_cast<int>(partition.firstVertSegment)},
                                                        {"firstTri", partition.firstTri},
+                                                       {"firstBorder", firstBorder < clipMap.borderCount ? firstBorder : -1},
                                                    };
-
-                                                   if (partition.borderCount > 0)
-                                                       jPartition["firstBorder"] = IndexInto(partition.borders, clipMap.borders);
-
-                                                   return jPartition;
                                                });
 
             jRoot["aabbTrees"] = world::Array(clipMap.aabbTrees,
@@ -368,7 +367,7 @@ namespace world
 {
     void SP_CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetClipMapSp::Type>& asset)
     {
-        const auto assetFile = context.OpenAssetFile(std::format("clipmap_sp/{}.json", asset.m_name));
+        const auto assetFile = context.OpenAssetFile(GetClipMapSpJsonFileName(asset.m_name));
         if (!assetFile)
             return;
 
@@ -377,7 +376,7 @@ namespace world
 
     void MP_CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetClipMapMp::Type>& asset)
     {
-        const auto assetFile = context.OpenAssetFile(std::format("clipmap_mp/{}.json", asset.m_name));
+        const auto assetFile = context.OpenAssetFile(GetClipMapMpJsonFileName(asset.m_name));
         if (!assetFile)
             return;
 

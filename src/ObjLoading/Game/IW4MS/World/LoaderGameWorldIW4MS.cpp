@@ -30,7 +30,7 @@ namespace
                                                            piece.impactDir = static_cast<char>(jPiece.at("impactDir").get<int>());
 
                                                            int impactPos[std::extent_v<decltype(piece.impactPos)>];
-                                                           world::ArrayOfSize(jPiece.at("impactPos"), impactPos, std::extent_v<decltype(impactPos)>);
+                                                           world::ArrayOfSize(jPiece.at("impactPos"), impactPos);
                                                            for (auto i = 0u; i < std::extent_v<decltype(impactPos)>; i++)
                                                                piece.impactPos[i] = static_cast<char>(impactPos[i]);
                                                        });
@@ -163,7 +163,6 @@ namespace
             {
                 world::ArrayOfSize(jTree.at("children"),
                                    tree.u.child,
-                                   std::extent_v<decltype(tree.u.child)>,
                                    [this](const json& jChild, pathnode_tree_t*& child)
                                    {
                                        if (jChild.is_null())
@@ -202,7 +201,7 @@ namespace
             world::Vec(jConstant.at("forward"), c.forward);
             jConstant.at("fRadius").get_to(c.fRadius);
             jConstant.at("minUseDistSq").get_to(c.minUseDistSq);
-            world::ArrayOfSize(jConstant.at("wOverlapNode"), c.wOverlapNode, std::extent_v<decltype(c.wOverlapNode)>);
+            world::ArrayOfSize(jConstant.at("wOverlapNode"), c.wOverlapNode);
 
             const auto& jLinks = jConstant.at("links");
             c.totalLinkCount = static_cast<uint16_t>(jLinks.size());
@@ -217,7 +216,7 @@ namespace
                                                    link.flags = static_cast<char>(jLink.at("flags").get<int>());
 
                                                    int badPlaceCount[std::extent_v<decltype(link.ubBadPlaceCount)>];
-                                                   world::ArrayOfSize(jLink.at("ubBadPlaceCount"), badPlaceCount, std::extent_v<decltype(badPlaceCount)>);
+                                                   world::ArrayOfSize(jLink.at("ubBadPlaceCount"), badPlaceCount);
                                                    for (auto i = 0u; i < std::extent_v<decltype(badPlaceCount)>; i++)
                                                        link.ubBadPlaceCount[i] = static_cast<char>(badPlaceCount[i]);
                                                });
@@ -226,8 +225,8 @@ namespace
             auto& d = node.dynamic;
 
             jDynamic.at("iFreeTime").get_to(d.iFreeTime);
-            world::ArrayOfSize(jDynamic.at("iValidTime"), d.iValidTime, std::extent_v<decltype(d.iValidTime)>);
-            world::ArrayOfSize(jDynamic.at("dangerousNodeTime"), d.dangerousNodeTime, std::extent_v<decltype(d.dangerousNodeTime)>);
+            world::ArrayOfSize(jDynamic.at("iValidTime"), d.iValidTime);
+            world::ArrayOfSize(jDynamic.at("dangerousNodeTime"), d.dangerousNodeTime);
             jDynamic.at("inPlayerLOSTime").get_to(d.inPlayerLOSTime);
             jDynamic.at("wLinkCount").get_to(d.wLinkCount);
             jDynamic.at("wOverlapCount").get_to(d.wOverlapCount);

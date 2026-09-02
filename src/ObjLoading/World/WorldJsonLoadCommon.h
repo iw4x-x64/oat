@@ -51,22 +51,21 @@ namespace world
                                   });
     }
 
-    template<typename ElementType, typename TransformFn>
-    void ArrayOfSize(const nlohmann::json& jArray, ElementType* elements, const size_t count, TransformFn&& transform)
+    template<typename ElementType, size_t Size, typename TransformFn>
+    void ArrayOfSize(const nlohmann::json& jArray, ElementType (&elements)[Size], TransformFn&& transform)
     {
         const auto& jElements = jArray.get_ref<const nlohmann::json::array_t&>();
-        if (jElements.size() != count)
-            throw LoadException(std::format("Expected array of {} entries but found {}", count, jElements.size()));
+        if (jElements.size() != Size)
+            throw LoadException(std::format("Expected array of {} entries but found {}", Size, jElements.size()));
 
-        for (auto i = 0u; i < count; i++)
+        for (auto i = 0u; i < Size; i++)
             transform(jElements[i], elements[i]);
     }
 
-    template<typename ElementType> void ArrayOfSize(const nlohmann::json& jArray, ElementType* elements, const size_t count)
+    template<typename ElementType, size_t Size> void ArrayOfSize(const nlohmann::json& jArray, ElementType (&elements)[Size])
     {
         ArrayOfSize(jArray,
                     elements,
-                    count,
                     [](const nlohmann::json& jElement, ElementType& element)
                     {
                         jElement.get_to(element);
@@ -96,12 +95,29 @@ namespace world
         return data;
     }
 
+    struct Base64Data
+    {
+        void* data;
+        size_t size;
+    };
+
+    [[nodiscard]] inline Base64Data Base64(MemoryManager& memory, const nlohmann::json& jData)
+    {
+        const auto& encoded = jData.get_ref<const std::string&>();
+        if (encoded.empty())
+            return {nullptr, 0u};
+
+        const auto size = base64::GetBase64DecodeOutputLength(encoded.data(), encoded.size());
+
+        return {Base64(memory, jData, size), size};
+    }
+
     template<size_t Size> void ReadIfPresent(const nlohmann::json& jParent, const char* key, unsigned char (&bytes)[Size])
     {
         const auto jBytes = jParent.find(key);
         if (jBytes == jParent.end())
             return;
 
-        ArrayOfSize(*jBytes, bytes, Size);
+        ArrayOfSize(*jBytes, bytes);
     }
 } // namespace world
