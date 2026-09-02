@@ -1,0 +1,137 @@
+#include "LoaderComWorldIW4MS.h"
+
+#include "Utils/Logging/Log.h"
+#include "World/WorldCommon.h"
+#include "World/WorldJsonLoadCommon.h"
+
+#include <format>
+#include <iostream>
+#include <nlohmann/json.hpp>
+
+using namespace nlohmann;
+using namespace IW4MS;
+
+namespace
+{
+    class JsonLoader
+    {
+    public:
+        JsonLoader(std::istream& stream, MemoryManager& memory)
+            : m_stream(stream),
+              m_memory(memory)
+        {
+        }
+
+        bool Load(ComWorld& comWorld) const
+        {
+            try
+            {
+                const auto jRoot = json::parse(m_stream);
+                std::string type;
+                std::string game;
+                unsigned version;
+
+                jRoot.at("_type").get_to(type);
+                jRoot.at("_version").get_to(version);
+                jRoot.at("_game").get_to(game);
+
+                if (type != "comworld" || version != 1u || game != "iw4")
+                {
+                    con::error("Tried to load comworld \"{}\" but did not find expected type comworld of version 1 for game iw4", comWorld.name);
+                    return false;
+                }
+
+                LoadComWorld(jRoot, comWorld);
+                return true;
+            }
+            catch (const json::exception& e)
+            {
+                con::error("Failed to parse json of comworld \"{}\": {}", comWorld.name, e.what());
+            }
+            catch (const world::LoadException& e)
+            {
+                con::error("Failed to load comworld \"{}\": {}", comWorld.name, e.what());
+            }
+
+            return false;
+        }
+
+    private:
+        void LoadComWorld(const json& jComWorld, ComWorld& comWorld) const
+        {
+            jComWorld.at("isInUse").get_to(comWorld.isInUse);
+
+            const auto& jLights = jComWorld.at("primaryLights");
+            comWorld.primaryLightCount = static_cast<unsigned>(jLights.size());
+            comWorld.primaryLights = world::Array<ComPrimaryLight>(m_memory,
+                                                                   jLights,
+                                                                   [this](const json& jLight, ComPrimaryLight& light)
+                                                                   {
+                                                                       LoadPrimaryLight(jLight, light);
+                                                                   });
+        }
+
+        void LoadPrimaryLight(const json& jLight, ComPrimaryLight& light) const
+        {
+            light.type = static_cast<char>(jLight.at("type").get<int>());
+            light.canUseShadowMap = jLight.at("canUseShadowMap").get<bool>() ? 1 : 0;
+            light.exponent = static_cast<char>(jLight.at("exponent").get<int>());
+            light.unused = static_cast<char>(jLight.value("unused", 0));
+
+            world::Vec(jLight.at("color"), light.color);
+            world::Vec(jLight.at("dir"), light.dir);
+            world::Vec(jLight.at("origin"), light.origin);
+
+            jLight.at("radius").get_to(light.radius);
+            jLight.at("cosHalfFovOuter").get_to(light.cosHalfFovOuter);
+            jLight.at("cosHalfFovInner").get_to(light.cosHalfFovInner);
+            jLight.at("cosHalfFovExpanded").get_to(light.cosHalfFovExpanded);
+            jLight.at("rotationLimit").get_to(light.rotationLimit);
+            jLight.at("translationLimit").get_to(light.translationLimit);
+
+            const auto& defName = jLight.at("defName").get_ref<const std::string&>();
+            light.defName = !defName.empty() ? m_memory.Dup(defName.c_str()) : nullptr;
+        }
+
+        std::istream& m_stream;
+        MemoryManager& m_memory;
+    };
+
+    class ComWorldLoader final : public AssetCreator<AssetComWorld>
+    {
+    public:
+        ComWorldLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(world::GetComWorldJsonFileName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* comWorld = m_memory.Alloc<ComWorld>();
+            comWorld->name = m_memory.Dup(assetName.c_str());
+
+            const JsonLoader loader(*file.m_stream, m_memory);
+            if (!loader.Load(*comWorld))
+                return AssetCreationResult::Failure();
+
+            return AssetCreationResult::Success(context.AddAsset<AssetComWorld>(assetName, comWorld));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+} // namespace
+
+namespace world
+{
+    std::unique_ptr<AssetCreator<AssetComWorld>> CreateComWorldLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<ComWorldLoader>(memory, searchPath);
+    }
+} // namespace world
