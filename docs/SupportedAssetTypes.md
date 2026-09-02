@@ -113,7 +113,7 @@ from this table.
 | GameWorldMp               | ✅               | ✅               | JSON, as above.                                                                |
 | MapEnts                   | ✅               | ✅               | Entity string as `.ents`, trigger volumes and stages as json beside it.        |
 | FxWorld                   | ✅               | ✅               | JSON, as above.                                                                |
-| GfxWorld                  | ✅               | ❌               | JSON, as above.                                                                |
+| GfxWorld                  | ✅               | ✅               | JSON, as above.                                                                |
 | GfxLightDef               | ✅               | ✅               |                                                                                |
 | Font_s                    | ✅               | ✅               |                                                                                |
 | MenuList                  | ✅               | ✅               | The output is decompiled. The result will not be the same as the input.        |

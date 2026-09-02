@@ -1,0 +1,716 @@
+#include "LoaderGfxWorldIW4MS.h"
+
+#include "Utils/Logging/Log.h"
+#include "World/WorldCommon.h"
+#include "World/WorldJsonLoadCommon.h"
+
+#include <cstdint>
+#include <format>
+#include <iostream>
+#include <nlohmann/json.hpp>
+
+using namespace nlohmann;
+using namespace IW4MS;
+
+namespace
+{
+    class JsonLoader
+    {
+    public:
+        JsonLoader(std::istream& stream, MemoryManager& memory, AssetCreationContext& context, AssetRegistration<AssetGfxWorld>& registration)
+            : m_stream(stream),
+              m_memory(memory),
+              m_context(context),
+              m_registration(registration)
+        {
+        }
+
+        bool Load(GfxWorld& gfxWorld) const
+        {
+            try
+            {
+                const auto jRoot = json::parse(m_stream);
+                std::string type;
+                std::string game;
+                unsigned version;
+
+                jRoot.at("_type").get_to(type);
+                jRoot.at("_version").get_to(version);
+                jRoot.at("_game").get_to(game);
+
+                if (type != "gfxworld" || version != 1u || game != "iw4")
+                {
+                    con::error("Tried to load gfxworld \"{}\" but did not find expected type gfxworld of version 1 for game iw4", gfxWorld.name);
+                    return false;
+                }
+
+                return LoadGfxWorld(jRoot, gfxWorld);
+            }
+            catch (const json::exception& e)
+            {
+                con::error("Failed to parse json of gfxworld \"{}\": {}", gfxWorld.name, e.what());
+            }
+            catch (const world::LoadException& e)
+            {
+                con::error("Failed to load gfxworld \"{}\": {}", gfxWorld.name, e.what());
+            }
+
+            return false;
+        }
+
+    private:
+        template<typename AssetType> bool LoadReference(const json& jParent, const char* key, typename AssetType::Type*& reference) const
+        {
+            const auto& name = jParent.at(key).get_ref<const std::string&>();
+            if (name.empty())
+            {
+                reference = nullptr;
+                return true;
+            }
+
+            auto* asset = m_context.LoadDependency<AssetType>(name);
+            if (!asset)
+            {
+                con::error("Could not find {} \"{}\" of gfxworld", key, name);
+                return false;
+            }
+
+            m_registration.AddDependency(asset);
+            reference = asset->Asset();
+
+            return true;
+        }
+
+        bool LoadGfxWorld(const json& jRoot, GfxWorld& gfxWorld) const
+        {
+            const auto& baseName = jRoot.at("baseName").get_ref<const std::string&>();
+            gfxWorld.baseName = !baseName.empty() ? m_memory.Dup(baseName.c_str()) : nullptr;
+
+            jRoot.at("checksum").get_to(gfxWorld.checksum);
+            jRoot.at("mapVtxChecksum").get_to(gfxWorld.mapVtxChecksum);
+            world::Bounds(jRoot.at("bounds"), gfxWorld.bounds);
+            gfxWorld.fogTypesAllowed = static_cast<char>(jRoot.at("fogTypesAllowed").get<int>());
+
+            const auto& jSortKeys = jRoot.at("sortKeys");
+            jSortKeys.at("litDecal").get_to(gfxWorld.sortKeyLitDecal);
+            jSortKeys.at("effectDecal").get_to(gfxWorld.sortKeyEffectDecal);
+            jSortKeys.at("effectAuto").get_to(gfxWorld.sortKeyEffectAuto);
+            jSortKeys.at("distortion").get_to(gfxWorld.sortKeyDistortion);
+
+            jRoot.at("primaryLightCount").get_to(gfxWorld.primaryLightCount);
+            jRoot.at("lastSunPrimaryLightIndex").get_to(gfxWorld.lastSunPrimaryLightIndex);
+
+            auto success = LoadSkies(jRoot.at("skies"), gfxWorld);
+
+            LoadDpvsPlanes(jRoot.at("dpvsPlanes"), gfxWorld);
+            success = LoadCells(jRoot.at("cells"), gfxWorld) && success;
+            success = LoadDraw(jRoot.at("draw"), gfxWorld.draw) && success;
+            LoadLightGrid(jRoot.at("lightGrid"), gfxWorld.lightGrid);
+            LoadModels(jRoot.at("models"), gfxWorld);
+            success = LoadMaterialMemory(jRoot.at("materialMemory"), gfxWorld) && success;
+            success = LoadSun(jRoot.at("sun"), gfxWorld.sun) && success;
+
+            world::ArrayOfSize(jRoot.at("outdoorLookupMatrix"),
+                               gfxWorld.outdoorLookupMatrix,
+                               [](const json& jRow, float (&row)[4])
+                               {
+                                   world::Vec(jRow, row);
+                               });
+            success = LoadReference<AssetImage>(jRoot, "outdoorImage", gfxWorld.outdoorImage) && success;
+
+            LoadShadowGeometry(jRoot.at("shadowGeom"), gfxWorld);
+            LoadLightRegions(jRoot.at("lightRegion"), gfxWorld);
+            success = LoadDpvsStatic(jRoot.at("dpvs"), gfxWorld) && success;
+            LoadDpvsDynamic(jRoot.at("dpvsDyn"), gfxWorld.dpvsDyn);
+            LoadHeroOnlyLights(jRoot.at("heroOnlyLights"), gfxWorld);
+
+            AllocRuntimeData(gfxWorld);
+
+            return success;
+        }
+
+        bool LoadSkies(const json& jSkies, GfxWorld& gfxWorld) const
+        {
+            auto success = true;
+
+            gfxWorld.skyCount = static_cast<int>(jSkies.size());
+            gfxWorld.skies = world::Array<GfxSky>(m_memory,
+                                                  jSkies,
+                                                  [this, &success](const json& jSky, GfxSky& sky)
+                                                  {
+                                                      const auto& jStartSurfs = jSky.at("skyStartSurfs");
+                                                      sky.skySurfCount = static_cast<int>(jStartSurfs.size());
+                                                      sky.skyStartSurfs = world::Array<int>(m_memory, jStartSurfs);
+
+                                                      sky.skySamplerState = static_cast<char>(jSky.at("skySamplerState").get<int>());
+
+                                                      success = LoadReference<AssetImage>(jSky, "skyImage", sky.skyImage) && success;
+                                                  });
+
+            return success;
+        }
+
+        void LoadDpvsPlanes(const json& jPlanes, GfxWorld& gfxWorld) const
+        {
+            auto& planes = gfxWorld.dpvsPlanes;
+
+            jPlanes.at("cellCount").get_to(planes.cellCount);
+
+            const auto& jPlaneArray = jPlanes.at("planes");
+            gfxWorld.planeCount = static_cast<int>(jPlaneArray.size());
+            planes.planes = world::Array<cplane_s>(m_memory,
+                                                   jPlaneArray,
+                                                   [](const json& jPlane, cplane_s& plane)
+                                                   {
+                                                       world::Vec(jPlane.at("normal"), plane.normal);
+                                                       jPlane.at("dist").get_to(plane.dist);
+                                                       plane.type = static_cast<char>(jPlane.at("type").get<int>());
+                                                   });
+
+            const auto nodes = world::Base64(m_memory, jPlanes.at("nodes"));
+            planes.nodes = static_cast<uint16_t*>(nodes.data);
+            gfxWorld.nodeCount = static_cast<int>(nodes.size / sizeof(uint16_t));
+        }
+
+        bool LoadCells(const json& jCells, GfxWorld& gfxWorld) const
+        {
+            const auto cellCount = static_cast<size_t>(gfxWorld.dpvsPlanes.cellCount);
+            if (jCells.size() != cellCount)
+                throw world::LoadException(std::format("Gfxworld has {} cells but its planes have {}", jCells.size(), cellCount));
+
+            if (cellCount == 0u)
+                return true;
+
+            auto success = true;
+
+            gfxWorld.cells = m_memory.Alloc<GfxCell>(cellCount);
+            gfxWorld.aabbTrees = m_memory.Alloc<GfxCellTree128>(cellCount);
+            gfxWorld.aabbTreeCounts = m_memory.Alloc<int>(cellCount);
+
+            for (auto i = 0u; i < cellCount; i++)
+            {
+                const auto& jCell = jCells[i];
+                auto& cell = gfxWorld.cells[i];
+
+                world::Bounds(jCell.at("bounds"), cell.bounds);
+
+                const auto& jPortals = jCell.at("portals");
+                cell.portalCount = static_cast<int>(jPortals.size());
+                cell.portals = world::Array<GfxPortal>(m_memory,
+                                                       jPortals,
+                                                       [this, &success](const json& jPortal, GfxPortal& portal)
+                                                       {
+                                                           success = LoadPortal(jPortal, portal) && success;
+                                                       });
+
+                const auto& jReflectionProbes = jCell.at("reflectionProbes");
+                cell.reflectionProbeCount = static_cast<char>(jReflectionProbes.size());
+                cell.reflectionProbes = world::Array<char>(m_memory, jReflectionProbes);
+
+                const auto& jAabbTree = jCell.at("aabbTree");
+                gfxWorld.aabbTreeCounts[i] = static_cast<int>(jAabbTree.size());
+                gfxWorld.aabbTrees[i].aabbTree = world::Array<GfxAabbTree>(m_memory,
+                                                                           jAabbTree,
+                                                                           [this](const json& jTree, GfxAabbTree& tree)
+                                                                           {
+                                                                               LoadAabbTree(jTree, tree);
+                                                                           });
+            }
+
+            return success;
+        }
+
+        bool LoadPortal(const json& jPortal, GfxPortal& portal) const
+        {
+            world::Vec(jPortal.at("plane"), portal.plane.coeffs);
+            jPortal.at("cellIndex").get_to(portal.cellIndex);
+            world::ArrayOfSize(jPortal.at("hullAxis"),
+                               portal.hullAxis,
+                               [](const json& jAxis, float (&axis)[3])
+                               {
+                                   world::Vec(jAxis, axis);
+                               });
+
+            const auto& jVertices = jPortal.at("vertices");
+            portal.vertexCount = static_cast<char>(jVertices.size());
+            portal.vertices = world::Array<vec3_t>(m_memory,
+                                                   jVertices,
+                                                   [](const json& jVertex, vec3_t& vertex)
+                                                   {
+                                                       world::Vec(jVertex, vertex.v);
+                                                   });
+
+            return true;
+        }
+
+        void LoadAabbTree(const json& jTree, GfxAabbTree& tree) const
+        {
+            world::Bounds(jTree.at("bounds"), tree.bounds);
+            jTree.at("childCount").get_to(tree.childCount);
+            jTree.at("surfaceCount").get_to(tree.surfaceCount);
+            jTree.at("startSurfIndex").get_to(tree.startSurfIndex);
+            jTree.at("surfaceCountNoDecal").get_to(tree.surfaceCountNoDecal);
+            jTree.at("startSurfIndexNoDecal").get_to(tree.startSurfIndexNoDecal);
+            jTree.at("childrenOffset").get_to(tree.childrenOffset);
+
+            const auto& jSmodelIndexes = jTree.at("smodelIndexes");
+            tree.smodelIndexCount = static_cast<uint16_t>(jSmodelIndexes.size());
+            tree.smodelIndexes = world::Array<StaticModelIndex>(m_memory, jSmodelIndexes);
+        }
+
+        bool LoadDraw(const json& jDraw, GfxWorldDraw& draw) const
+        {
+            auto success = true;
+
+            const auto& jReflectionProbes = jDraw.at("reflectionProbes");
+            draw.reflectionProbeCount = static_cast<unsigned>(jReflectionProbes.size());
+            if (draw.reflectionProbeCount > 0u)
+            {
+                draw.reflectionProbes = m_memory.Alloc<GfxImage*>(draw.reflectionProbeCount);
+                draw.reflectionProbeOrigins = m_memory.Alloc<GfxReflectionProbe>(draw.reflectionProbeCount);
+
+                for (auto i = 0u; i < draw.reflectionProbeCount; i++)
+                {
+                    const auto& jProbe = jReflectionProbes[i];
+
+                    if (jProbe.contains("image"))
+                        success = LoadReference<AssetImage>(jProbe, "image", draw.reflectionProbes[i]) && success;
+
+                    if (jProbe.contains("origin"))
+                        world::Vec(jProbe.at("origin"), draw.reflectionProbeOrigins[i].origin);
+                }
+            }
+
+            const auto& jLightmaps = jDraw.at("lightmaps");
+            draw.lightmapCount = static_cast<int>(jLightmaps.size());
+            draw.lightmaps = world::Array<GfxLightmapArray>(m_memory,
+                                                            jLightmaps,
+                                                            [this, &success](const json& jLightmap, GfxLightmapArray& lightmap)
+                                                            {
+                                                                success = LoadReference<AssetImage>(jLightmap, "primary", lightmap.primary) && success;
+                                                                success = LoadReference<AssetImage>(jLightmap, "secondary", lightmap.secondary) && success;
+                                                            });
+
+            success = LoadReference<AssetImage>(jDraw, "lightmapOverridePrimary", draw.lightmapOverridePrimary) && success;
+            success = LoadReference<AssetImage>(jDraw, "lightmapOverrideSecondary", draw.lightmapOverrideSecondary) && success;
+
+            jDraw.at("vertexCount").get_to(draw.vertexCount);
+            draw.vd.vertices =
+                static_cast<GfxWorldVertex*>(world::Base64(m_memory, jDraw.at("vertices"), static_cast<size_t>(draw.vertexCount) * sizeof(GfxWorldVertex)));
+
+            jDraw.at("vertexLayerDataSize").get_to(draw.vertexLayerDataSize);
+            draw.vld.data = static_cast<char*>(world::Base64(m_memory, jDraw.at("vertexLayerData"), draw.vertexLayerDataSize));
+
+            jDraw.at("indexCount").get_to(draw.indexCount);
+            draw.indices = static_cast<r_index_t*>(world::Base64(m_memory, jDraw.at("indices"), static_cast<size_t>(draw.indexCount) * sizeof(r_index_t)));
+
+            return success;
+        }
+
+        void LoadLightGrid(const json& jGrid, GfxLightGrid& grid) const
+        {
+            jGrid.at("hasLightRegions").get_to(grid.hasLightRegions);
+            jGrid.at("lastSunPrimaryLightIndex").get_to(grid.lastSunPrimaryLightIndex);
+            world::ArrayOfSize(jGrid.at("mins"), grid.mins);
+            world::ArrayOfSize(jGrid.at("maxs"), grid.maxs);
+            jGrid.at("rowAxis").get_to(grid.rowAxis);
+            jGrid.at("colAxis").get_to(grid.colAxis);
+
+            const auto rowCount =
+                grid.maxs[grid.rowAxis] >= grid.mins[grid.rowAxis] ? static_cast<size_t>(grid.maxs[grid.rowAxis] - grid.mins[grid.rowAxis]) + 1u : 0u;
+            const auto& jRowDataStart = jGrid.at("rowDataStart");
+            if (jRowDataStart.size() != rowCount)
+                throw world::LoadException(std::format("Light grid has {} row starts but spans {} rows", jRowDataStart.size(), rowCount));
+            grid.rowDataStart = world::Array<uint16_t>(m_memory, jRowDataStart);
+
+            const auto rawRowData = world::Base64(m_memory, jGrid.at("rawRowData"));
+            grid.rawRowData = static_cast<char*>(rawRowData.data);
+            grid.rawRowDataSize = static_cast<unsigned>(rawRowData.size);
+
+            const auto& jEntries = jGrid.at("entries");
+            grid.entryCount = static_cast<unsigned>(jEntries.size());
+            grid.entries = world::Array<GfxLightGridEntry>(m_memory,
+                                                           jEntries,
+                                                           [](const json& jEntry, GfxLightGridEntry& entry)
+                                                           {
+                                                               jEntry.at("colorsIndex").get_to(entry.colorsIndex);
+                                                               entry.primaryLightIndex = static_cast<char>(jEntry.at("primaryLightIndex").get<int>());
+                                                               entry.needsTrace = static_cast<char>(jEntry.at("needsTrace").get<int>());
+                                                           });
+
+            jGrid.at("colorCount").get_to(grid.colorCount);
+            grid.colors = static_cast<GfxLightGridColors*>(
+                world::Base64(m_memory, jGrid.at("colors"), static_cast<size_t>(grid.colorCount) * sizeof(GfxLightGridColors)));
+        }
+
+        void LoadModels(const json& jModels, GfxWorld& gfxWorld) const
+        {
+            gfxWorld.modelCount = static_cast<int>(jModels.size());
+            gfxWorld.models = world::Array<GfxBrushModel>(m_memory,
+                                                          jModels,
+                                                          [](const json& jModel, GfxBrushModel& model)
+                                                          {
+                                                              world::Bounds(jModel.at("bounds"), model.bounds);
+                                                              jModel.at("radius").get_to(model.radius);
+                                                              jModel.at("surfaceCount").get_to(model.surfaceCount);
+                                                              jModel.at("startSurfIndex").get_to(model.startSurfIndex);
+                                                              jModel.at("surfaceCountNoDecal").get_to(model.surfaceCountNoDecal);
+                                                          });
+        }
+
+        bool LoadMaterialMemory(const json& jMaterialMemory, GfxWorld& gfxWorld) const
+        {
+            auto success = true;
+
+            gfxWorld.materialMemoryCount = static_cast<int>(jMaterialMemory.size());
+            gfxWorld.materialMemory =
+                world::Array<MaterialMemory>(m_memory,
+                                             jMaterialMemory,
+                                             [this, &success](const json& jMemory, MaterialMemory& materialMemory)
+                                             {
+                                                 success = LoadReference<AssetMaterial>(jMemory, "material", materialMemory.material) && success;
+                                                 jMemory.at("memory").get_to(materialMemory.memory);
+                                             });
+
+            return success;
+        }
+
+        bool LoadSun(const json& jSun, sunflare_t& sun) const
+        {
+            jSun.at("hasValidData").get_to(sun.hasValidData);
+            jSun.at("spriteSize").get_to(sun.spriteSize);
+            jSun.at("flareMinSize").get_to(sun.flareMinSize);
+            jSun.at("flareMinDot").get_to(sun.flareMinDot);
+            jSun.at("flareMaxSize").get_to(sun.flareMaxSize);
+            jSun.at("flareMaxDot").get_to(sun.flareMaxDot);
+            jSun.at("flareMaxAlpha").get_to(sun.flareMaxAlpha);
+            jSun.at("flareFadeInTime").get_to(sun.flareFadeInTime);
+            jSun.at("flareFadeOutTime").get_to(sun.flareFadeOutTime);
+            jSun.at("blindMinDot").get_to(sun.blindMinDot);
+            jSun.at("blindMaxDot").get_to(sun.blindMaxDot);
+            jSun.at("blindMaxDarken").get_to(sun.blindMaxDarken);
+            jSun.at("blindFadeInTime").get_to(sun.blindFadeInTime);
+            jSun.at("blindFadeOutTime").get_to(sun.blindFadeOutTime);
+            jSun.at("glareMinDot").get_to(sun.glareMinDot);
+            jSun.at("glareMaxDot").get_to(sun.glareMaxDot);
+            jSun.at("glareMaxLighten").get_to(sun.glareMaxLighten);
+            jSun.at("glareFadeInTime").get_to(sun.glareFadeInTime);
+            jSun.at("glareFadeOutTime").get_to(sun.glareFadeOutTime);
+            world::Vec(jSun.at("sunFxPosition"), sun.sunFxPosition);
+
+            return LoadReference<AssetMaterial>(jSun, "spriteMaterial", sun.spriteMaterial)
+                   && LoadReference<AssetMaterial>(jSun, "flareMaterial", sun.flareMaterial);
+        }
+
+        void LoadShadowGeometry(const json& jShadowGeom, GfxWorld& gfxWorld) const
+        {
+            if (jShadowGeom.size() != gfxWorld.primaryLightCount)
+            {
+                throw world::LoadException(
+                    std::format("Gfxworld has {} shadow geometries but {} primary lights", jShadowGeom.size(), gfxWorld.primaryLightCount));
+            }
+
+            gfxWorld.shadowGeom = world::Array<GfxShadowGeometry>(m_memory,
+                                                                  jShadowGeom,
+                                                                  [this](const json& jGeom, GfxShadowGeometry& geom)
+                                                                  {
+                                                                      const auto& jSortedSurfIndex = jGeom.at("sortedSurfIndex");
+                                                                      geom.surfaceCount = static_cast<uint16_t>(jSortedSurfIndex.size());
+                                                                      geom.sortedSurfIndex = world::Array<uint16_t>(m_memory, jSortedSurfIndex);
+
+                                                                      const auto& jSmodelIndex = jGeom.at("smodelIndex");
+                                                                      geom.smodelCount = static_cast<uint16_t>(jSmodelIndex.size());
+                                                                      geom.smodelIndex = world::Array<uint16_t>(m_memory, jSmodelIndex);
+                                                                  });
+        }
+
+        void LoadLightRegions(const json& jLightRegions, GfxWorld& gfxWorld) const
+        {
+            if (jLightRegions.size() != gfxWorld.primaryLightCount)
+            {
+                throw world::LoadException(
+                    std::format("Gfxworld has {} light regions but {} primary lights", jLightRegions.size(), gfxWorld.primaryLightCount));
+            }
+
+            gfxWorld.lightRegion = world::Array<GfxLightRegion>(m_memory,
+                                                                jLightRegions,
+                                                                [this](const json& jRegion, GfxLightRegion& region)
+                                                                {
+                                                                    const auto& jHulls = jRegion.at("hulls");
+                                                                    region.hullCount = static_cast<unsigned>(jHulls.size());
+                                                                    region.hulls =
+                                                                        world::Array<GfxLightRegionHull>(m_memory,
+                                                                                                         jHulls,
+                                                                                                         [this](const json& jHull, GfxLightRegionHull& hull)
+                                                                                                         {
+                                                                                                             LoadLightRegionHull(jHull, hull);
+                                                                                                         });
+                                                                });
+        }
+
+        void LoadLightRegionHull(const json& jHull, GfxLightRegionHull& hull) const
+        {
+            world::ArrayOfSize(jHull.at("kdopMidPoint"), hull.kdopMidPoint);
+            world::ArrayOfSize(jHull.at("kdopHalfSize"), hull.kdopHalfSize);
+
+            const auto& jAxis = jHull.at("axis");
+            hull.axisCount = static_cast<unsigned>(jAxis.size());
+            hull.axis = world::Array<GfxLightRegionAxis>(m_memory,
+                                                         jAxis,
+                                                         [](const json& jRegionAxis, GfxLightRegionAxis& axis)
+                                                         {
+                                                             world::Vec(jRegionAxis.at("dir"), axis.dir);
+                                                             jRegionAxis.at("midPoint").get_to(axis.midPoint);
+                                                             jRegionAxis.at("halfSize").get_to(axis.halfSize);
+                                                         });
+        }
+
+        bool LoadDpvsStatic(const json& jDpvs, GfxWorld& gfxWorld) const
+        {
+            auto& dpvs = gfxWorld.dpvs;
+
+            jDpvs.at("smodelCount").get_to(dpvs.smodelCount);
+            jDpvs.at("staticSurfaceCount").get_to(dpvs.staticSurfaceCount);
+            jDpvs.at("staticSurfaceCountNoDecal").get_to(dpvs.staticSurfaceCountNoDecal);
+            jDpvs.at("litOpaqueSurfsBegin").get_to(dpvs.litOpaqueSurfsBegin);
+            jDpvs.at("litOpaqueSurfsEnd").get_to(dpvs.litOpaqueSurfsEnd);
+            jDpvs.at("litTransSurfsBegin").get_to(dpvs.litTransSurfsBegin);
+            jDpvs.at("litTransSurfsEnd").get_to(dpvs.litTransSurfsEnd);
+            jDpvs.at("shadowCasterSurfsBegin").get_to(dpvs.shadowCasterSurfsBegin);
+            jDpvs.at("shadowCasterSurfsEnd").get_to(dpvs.shadowCasterSurfsEnd);
+            jDpvs.at("emissiveSurfsBegin").get_to(dpvs.emissiveSurfsBegin);
+            jDpvs.at("emissiveSurfsEnd").get_to(dpvs.emissiveSurfsEnd);
+            jDpvs.at("smodelVisDataCount").get_to(dpvs.smodelVisDataCount);
+            jDpvs.at("surfaceVisDataCount").get_to(dpvs.surfaceVisDataCount);
+
+            dpvs.sortedSurfIndex = static_cast<uint16_t*>(world::Base64(
+                m_memory, jDpvs.at("sortedSurfIndex"), (static_cast<size_t>(dpvs.staticSurfaceCount) + dpvs.staticSurfaceCountNoDecal) * sizeof(uint16_t)));
+
+            const auto& jSmodelInsts = jDpvs.at("smodelInsts");
+            if (jSmodelInsts.size() != dpvs.smodelCount)
+                throw world::LoadException(std::format("Gfxworld has {} static model instances but {} static models", jSmodelInsts.size(), dpvs.smodelCount));
+
+            dpvs.smodelInsts = world::Array<GfxStaticModelInst>(m_memory,
+                                                                jSmodelInsts,
+                                                                [](const json& jInst, GfxStaticModelInst& inst)
+                                                                {
+                                                                    world::Bounds(jInst.at("bounds"), inst.bounds);
+                                                                    world::Vec(jInst.at("lightingOrigin"), inst.lightingOrigin);
+                                                                });
+
+            auto success = true;
+
+            const auto& jSurfaces = jDpvs.at("surfaces");
+            gfxWorld.surfaceCount = static_cast<unsigned>(jSurfaces.size());
+            dpvs.surfaces = world::Array<GfxSurface>(m_memory,
+                                                     jSurfaces,
+                                                     [this, &success](const json& jSurface, GfxSurface& surface)
+                                                     {
+                                                         const auto& jTris = jSurface.at("tris");
+                                                         jTris.at("vertexLayerData").get_to(surface.tris.vertexLayerData);
+                                                         jTris.at("firstVertex").get_to(surface.tris.firstVertex);
+                                                         jTris.at("vertexCount").get_to(surface.tris.vertexCount);
+                                                         jTris.at("triCount").get_to(surface.tris.triCount);
+                                                         jTris.at("baseIndex").get_to(surface.tris.baseIndex);
+
+                                                         jSurface.at("laf").get_to(surface.laf.packed);
+
+                                                         success = LoadReference<AssetMaterial>(jSurface, "material", surface.material) && success;
+                                                     });
+
+            const auto& jSurfacesBounds = jDpvs.at("surfacesBounds");
+            if (jSurfacesBounds.size() != gfxWorld.surfaceCount)
+            {
+                throw world::LoadException(std::format("Gfxworld has {} surface bounds but {} surfaces", jSurfacesBounds.size(), gfxWorld.surfaceCount));
+            }
+
+            dpvs.surfacesBounds = world::Array<GfxSurfaceBounds>(m_memory,
+                                                                 jSurfacesBounds,
+                                                                 [](const json& jBounds, GfxSurfaceBounds& bounds)
+                                                                 {
+                                                                     world::Bounds(jBounds, bounds.bounds);
+                                                                 });
+
+            const auto& jSmodelDrawInsts = jDpvs.at("smodelDrawInsts");
+            if (jSmodelDrawInsts.size() != dpvs.smodelCount)
+            {
+                throw world::LoadException(
+                    std::format("Gfxworld has {} static model draw instances but {} static models", jSmodelDrawInsts.size(), dpvs.smodelCount));
+            }
+
+            dpvs.smodelDrawInsts = world::Array<GfxStaticModelDrawInst>(m_memory,
+                                                                        jSmodelDrawInsts,
+                                                                        [this, &success](const json& jInst, GfxStaticModelDrawInst& inst)
+                                                                        {
+                                                                            success = LoadStaticModelDrawInst(jInst, inst) && success;
+                                                                        });
+
+            return success;
+        }
+
+        bool LoadStaticModelDrawInst(const json& jInst, GfxStaticModelDrawInst& inst) const
+        {
+            const auto& jPlacement = jInst.at("placement");
+            world::Vec(jPlacement.at("origin"), inst.placement.origin);
+            world::ArrayOfSize(jPlacement.at("axis"),
+                               inst.placement.axis,
+                               [](const json& jAxis, float (&axis)[3])
+                               {
+                                   world::Vec(jAxis, axis);
+                               });
+            jPlacement.at("scale").get_to(inst.placement.scale);
+
+            jInst.at("cullDist").get_to(inst.cullDist);
+            jInst.at("lightingHandle").get_to(inst.lightingHandle);
+            inst.reflectionProbeIndex = static_cast<char>(jInst.at("reflectionProbeIndex").get<int>());
+            inst.primaryLightIndex = static_cast<char>(jInst.at("primaryLightIndex").get<int>());
+            inst.flags = static_cast<char>(jInst.at("flags").get<int>());
+            inst.firstMtlSkinIndex = static_cast<char>(jInst.at("firstMtlSkinIndex").get<int>());
+            jInst.at("groundLighting").get_to(inst.groundLighting.packed);
+            world::ArrayOfSize(jInst.at("cacheId"), inst.cacheId);
+
+            return LoadReference<AssetXModel>(jInst, "model", inst.model);
+        }
+
+        static void LoadDpvsDynamic(const json& jDpvsDyn, GfxWorldDpvsDynamic& dpvsDyn)
+        {
+            world::ArrayOfSize(jDpvsDyn.at("dynEntClientWordCount"), dpvsDyn.dynEntClientWordCount);
+            world::ArrayOfSize(jDpvsDyn.at("dynEntClientCount"), dpvsDyn.dynEntClientCount);
+        }
+
+        void LoadHeroOnlyLights(const json& jLights, GfxWorld& gfxWorld) const
+        {
+            gfxWorld.heroOnlyLightCount = static_cast<unsigned>(jLights.size());
+            gfxWorld.heroOnlyLights = world::Array<GfxHeroOnlyLight>(m_memory,
+                                                                     jLights,
+                                                                     [](const json& jLight, GfxHeroOnlyLight& light)
+                                                                     {
+                                                                         light.type = static_cast<char>(jLight.at("type").get<int>());
+                                                                         world::Vec(jLight.at("color"), light.color);
+                                                                         world::Vec(jLight.at("dir"), light.dir);
+                                                                         world::Vec(jLight.at("origin"), light.origin);
+                                                                         jLight.at("radius").get_to(light.radius);
+                                                                         jLight.at("cosHalfFovOuter").get_to(light.cosHalfFovOuter);
+                                                                         jLight.at("cosHalfFovInner").get_to(light.cosHalfFovInner);
+                                                                         jLight.at("exponent").get_to(light.exponent);
+                                                                     });
+        }
+
+        void AllocRuntimeData(GfxWorld& gfxWorld) const
+        {
+            const auto cellCount = static_cast<size_t>(gfxWorld.dpvsPlanes.cellCount);
+            const auto cellWordCount = (cellCount + 31u) / 32u;
+            const auto nonSunLightCount = gfxWorld.primaryLightCount - gfxWorld.lastSunPrimaryLightIndex - 1u;
+
+            if (cellCount > 0u)
+            {
+                gfxWorld.dpvsPlanes.sceneEntCellBits = m_memory.Alloc<raw_uint>(cellCount * 0x200u);
+                gfxWorld.cellCasterBits = m_memory.Alloc<raw_uint>(cellCount * cellWordCount);
+            }
+
+            const auto& dpvsDyn = gfxWorld.dpvsDyn;
+            if (dpvsDyn.dynEntClientCount[0] > 0u)
+            {
+                gfxWorld.sceneDynModel = m_memory.Alloc<GfxSceneDynModel4>(dpvsDyn.dynEntClientCount[0]);
+                gfxWorld.nonSunPrimaryLightForModelDynEnt = m_memory.Alloc<char>(dpvsDyn.dynEntClientCount[0]);
+            }
+
+            if (dpvsDyn.dynEntClientCount[1] > 0u)
+                gfxWorld.sceneDynBrush = m_memory.Alloc<GfxSceneDynBrush>(dpvsDyn.dynEntClientCount[1]);
+
+            if (nonSunLightCount > 0u)
+            {
+                gfxWorld.primaryLightEntityShadowVis = m_memory.Alloc<raw_uint>(nonSunLightCount * 0x2000u);
+
+                for (auto i = 0u; i < std::extent_v<decltype(gfxWorld.primaryLightDynEntShadowVis)>; i++)
+                {
+                    if (dpvsDyn.dynEntClientCount[i] > 0u)
+                        gfxWorld.primaryLightDynEntShadowVis[i] = m_memory.Alloc<raw_uint>(dpvsDyn.dynEntClientCount[i] * nonSunLightCount);
+                }
+            }
+
+            auto& draw = gfxWorld.draw;
+            if (draw.reflectionProbeCount > 0u)
+                draw.reflectionProbeTextures = m_memory.Alloc<GfxTexture>(draw.reflectionProbeCount);
+
+            if (draw.lightmapCount > 0)
+            {
+                draw.lightmapPrimaryTextures = m_memory.Alloc<GfxTexture>(static_cast<size_t>(draw.lightmapCount));
+                draw.lightmapSecondaryTextures = m_memory.Alloc<GfxTexture>(static_cast<size_t>(draw.lightmapCount));
+            }
+
+            auto& dpvs = gfxWorld.dpvs;
+            for (auto i = 0u; i < std::extent_v<decltype(dpvs.smodelVisData)>; i++)
+            {
+                if (dpvs.smodelCount > 0u)
+                    dpvs.smodelVisData[i] = m_memory.Alloc<char>(dpvs.smodelCount);
+                if (dpvs.staticSurfaceCount > 0u)
+                    dpvs.surfaceVisData[i] = m_memory.Alloc<char>(dpvs.staticSurfaceCount);
+            }
+
+            if (gfxWorld.surfaceCount > 0u)
+                dpvs.surfaceMaterials = m_memory.Alloc<GfxDrawSurf>(gfxWorld.surfaceCount);
+
+            if (dpvs.surfaceVisDataCount > 0u)
+                dpvs.surfaceCastsSunShadow = m_memory.Alloc<raw_uint128>(dpvs.surfaceVisDataCount);
+
+            auto& dynamic = gfxWorld.dpvsDyn;
+            for (auto i = 0u; i < std::extent_v<decltype(dynamic.dynEntCellBits)>; i++)
+            {
+                if (dynamic.dynEntClientWordCount[i] == 0u)
+                    continue;
+
+                if (cellCount > 0u)
+                    dynamic.dynEntCellBits[i] = m_memory.Alloc<raw_uint>(dynamic.dynEntClientWordCount[i] * cellCount);
+
+                for (auto visData = 0u; visData < std::extent_v<decltype(dynamic.dynEntVisData[0])>; visData++)
+                    dynamic.dynEntVisData[i][visData] = m_memory.Alloc<raw_byte16>(32u * dynamic.dynEntClientWordCount[i]);
+            }
+        }
+
+        std::istream& m_stream;
+        MemoryManager& m_memory;
+        AssetCreationContext& m_context;
+        AssetRegistration<AssetGfxWorld>& m_registration;
+    };
+
+    class GfxWorldLoader final : public AssetCreator<AssetGfxWorld>
+    {
+    public:
+        GfxWorldLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(world::GetGfxWorldJsonFileName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* gfxWorld = m_memory.Alloc<GfxWorld>();
+            gfxWorld->name = m_memory.Dup(assetName.c_str());
+
+            AssetRegistration<AssetGfxWorld> registration(assetName, gfxWorld);
+
+            const JsonLoader loader(*file.m_stream, m_memory, context, registration);
+            if (!loader.Load(*gfxWorld))
+                return AssetCreationResult::Failure();
+
+            return AssetCreationResult::Success(context.AddAsset(std::move(registration)));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+} // namespace
+
+namespace world
+{
+    std::unique_ptr<AssetCreator<AssetGfxWorld>> CreateGfxWorldLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<GfxWorldLoader>(memory, searchPath);
+    }
+} // namespace world
