@@ -1,5 +1,6 @@
 #include "LoadedSoundDumperIW4MS.h"
 
+#include "Sound/LoadedSoundCommon.h"
 #include "Sound/WavTypes.h"
 #include "Sound/WavWriter.h"
 #include "Utils/Logging/Log.h"
@@ -28,7 +29,7 @@ namespace sound
     void LoadedSoundDumperIW4MS::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetLoadedSound::Type>& asset)
     {
         const auto* loadedSound = asset.Asset();
-        const auto assetFile = context.OpenAssetFile(std::format("sound/{}", asset.m_name));
+        const auto assetFile = context.OpenAssetFile(sound::GetLoadedSoundFileNameForAssetName(asset.m_name));
 
         if (!assetFile)
             return;
