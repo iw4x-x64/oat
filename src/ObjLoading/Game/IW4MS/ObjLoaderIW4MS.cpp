@@ -28,6 +28,7 @@
 #include "PhysPreset/GdtLoaderPhysPresetIW4MS.h"
 #include "PhysPreset/RawLoaderPhysPresetIW4MS.h"
 #include "RawFile/LoaderRawFileIW4MS.h"
+#include "Sound/LoaderLoadedSoundIW4MS.h"
 #include "Sound/LoaderSoundCurveIW4MS.h"
 #include "StringTable/LoaderStringTableIW4MS.h"
 #include "StructuredDataDef/LoaderStructuredDataDefIW4MS.h"
@@ -114,6 +115,7 @@ namespace
 
         collection.AddAssetCreator(material::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(sound_curve::CreateLoaderIW4MS(memory, searchPath));
+        collection.AddAssetCreator(sound::CreateLoadedSoundLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(light_def::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(menu::CreateMenuListLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(localize::CreateLoaderIW4MS(memory, searchPath, zone));
