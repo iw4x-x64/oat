@@ -112,7 +112,7 @@ namespace
                                                                   jInitGeoData,
                                                                   [](const json& jData, FxGlassGeometryData& data)
                                                                   {
-                                                                      world::ArrayOfSize(jData, data.anonymous, std::extent_v<decltype(data.anonymous)>);
+                                                                      world::ArrayOfSize(jData, data.anonymous);
                                                                   });
 
             AllocRuntimeData(glass);
@@ -151,12 +151,11 @@ namespace
             jDef.at("halfThickness").get_to(def.halfThickness);
             world::ArrayOfSize(jDef.at("texVecs"),
                                def.texVecs,
-                               std::extent_v<decltype(def.texVecs)>,
                                [](const json& jTexVec, float (&texVec)[2])
                                {
                                    world::Vec(jTexVec, texVec);
                                });
-            world::ArrayOfSize(jDef.at("color"), def.color.array, std::extent_v<decltype(def.color.array)>);
+            world::ArrayOfSize(jDef.at("color"), def.color.array);
 
             return LoadReference<AssetMaterial>(jDef, "material", def.material)
                    && LoadReference<AssetMaterial>(jDef, "materialShattered", def.materialShattered)

@@ -107,7 +107,7 @@ from this table.
 | snd_alias_list_t          | ✅               | ❌               | Dumped as CSV. Some `flags` bits are still unidentified, see Q-010.            |
 | SndCurve                  | ✅               | ✅               |                                                                                |
 | LoadedSound               | ✅               | ✅               |                                                                                |
-| clipMap_t                 | ✅               | ❌               | JSON. Compiled map output: a `.map` compiles into it and cannot be recovered. |
+| clipMap_t                 | ✅               | ✅               | JSON. Compiled map output: a `.map` compiles into it and cannot be recovered. |
 | ComWorld                  | ✅               | ✅               | JSON, as above.                                                                |
 | GameWorldSp               | ✅               | ✅               | JSON, as above.                                                                |
 | GameWorldMp               | ✅               | ✅               | JSON, as above.                                                                |

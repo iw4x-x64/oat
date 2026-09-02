@@ -1,0 +1,541 @@
+#include "LoaderClipMapIW4MS.h"
+
+#include "Utils/Logging/Log.h"
+#include "World/WorldCommon.h"
+#include "World/WorldJsonLoadCommon.h"
+
+#include <cstdint>
+#include <format>
+#include <iostream>
+#include <nlohmann/json.hpp>
+
+using namespace nlohmann;
+using namespace IW4MS;
+
+namespace
+{
+    class JsonLoader
+    {
+    public:
+        JsonLoader(std::istream& stream, MemoryManager& memory, AssetCreationContext& context, GenericAssetRegistration& registration, const char* typeName)
+            : m_stream(stream),
+              m_memory(memory),
+              m_context(context),
+              m_registration(registration),
+              m_type_name(typeName)
+        {
+        }
+
+        bool Load(clipMap_t& clipMap) const
+        {
+            try
+            {
+                const auto jRoot = json::parse(m_stream);
+                std::string type;
+                std::string game;
+                unsigned version;
+
+                jRoot.at("_type").get_to(type);
+                jRoot.at("_version").get_to(version);
+                jRoot.at("_game").get_to(game);
+
+                if (type != m_type_name || version != 1u || game != "iw4")
+                {
+                    con::error("Tried to load {} \"{}\" but did not find expected type {} of version 1 for game iw4", m_type_name, clipMap.name, m_type_name);
+                    return false;
+                }
+
+                return LoadClipMap(jRoot, clipMap);
+            }
+            catch (const json::exception& e)
+            {
+                con::error("Failed to parse json of {} \"{}\": {}", m_type_name, clipMap.name, e.what());
+            }
+            catch (const world::LoadException& e)
+            {
+                con::error("Failed to load {} \"{}\": {}", m_type_name, clipMap.name, e.what());
+            }
+
+            return false;
+        }
+
+    private:
+        template<typename ElementType>
+        [[nodiscard]] static ElementType* PointerInto(const json& jIndex, ElementType* elements, const size_t elementCount, const char* what)
+        {
+            const auto index = jIndex.get<int>();
+            if (index < 0)
+                return nullptr;
+
+            if (static_cast<size_t>(index) >= elementCount)
+                throw world::LoadException(std::format("{} index {} is out of bounds", what, index));
+
+            return &elements[index];
+        }
+
+        bool LoadClipMap(const json& jRoot, clipMap_t& clipMap) const
+        {
+            jRoot.at("isInUse").get_to(clipMap.isInUse);
+            jRoot.at("checksum").get_to(clipMap.checksum);
+
+            LoadPlanes(jRoot.at("planes"), clipMap);
+            LoadMaterials(jRoot.at("materials"), clipMap);
+
+            const auto brushEdges = world::Base64(m_memory, jRoot.at("brushEdges"));
+            clipMap.brushEdges = static_cast<cbrushedge_t*>(brushEdges.data);
+            clipMap.numBrushEdges = static_cast<unsigned>(brushEdges.size);
+
+            LoadBrushSides(jRoot.at("brushsides"), clipMap);
+            LoadNodes(jRoot.at("nodes"), clipMap);
+            LoadLeafs(jRoot.at("leafs"), clipMap);
+
+            const auto& jLeafBrushes = jRoot.at("leafbrushes");
+            clipMap.numLeafBrushes = static_cast<unsigned>(jLeafBrushes.size());
+            clipMap.leafbrushes = world::Array<LeafBrush>(m_memory, jLeafBrushes);
+
+            LoadLeafBrushNodes(jRoot.at("leafbrushNodes"), clipMap);
+
+            const auto& jLeafSurfaces = jRoot.at("leafsurfaces");
+            clipMap.numLeafSurfaces = static_cast<unsigned>(jLeafSurfaces.size());
+            clipMap.leafsurfaces = world::Array<unsigned int>(m_memory, jLeafSurfaces);
+
+            const auto& jVerts = jRoot.at("verts");
+            clipMap.vertCount = static_cast<unsigned>(jVerts.size());
+            clipMap.verts = world::Array<vec3_t>(m_memory,
+                                                 jVerts,
+                                                 [](const json& jVert, vec3_t& vert)
+                                                 {
+                                                     world::Vec(jVert, vert.v);
+                                                 });
+
+            LoadTriangles(jRoot, clipMap);
+            LoadBorders(jRoot.at("borders"), clipMap);
+            LoadPartitions(jRoot.at("partitions"), clipMap);
+            LoadAabbTrees(jRoot.at("aabbTrees"), clipMap);
+            LoadCModels(jRoot.at("cmodels"), clipMap);
+            LoadBrushes(jRoot, clipMap);
+            LoadSModelNodes(jRoot.at("smodelNodes"), clipMap);
+
+            world::ReadIfPresent(jRoot, "padding", reinterpret_cast<unsigned char (&)[std::extent_v<decltype(clipMap.padding)>]>(clipMap.padding));
+
+            return LoadStaticModels(jRoot.at("staticModelList"), clipMap) && LoadDynEntities(jRoot.at("dynEntDefList"), clipMap)
+                   && LoadReference<AssetMapEnts>(jRoot, "mapEnts", clipMap.mapEnts);
+        }
+
+        void LoadPlanes(const json& jPlanes, clipMap_t& clipMap) const
+        {
+            clipMap.planeCount = static_cast<int>(jPlanes.size());
+            clipMap.planes = world::Array<cplane_s>(m_memory,
+                                                    jPlanes,
+                                                    [](const json& jPlane, cplane_s& plane)
+                                                    {
+                                                        world::Vec(jPlane.at("normal"), plane.normal);
+                                                        jPlane.at("dist").get_to(plane.dist);
+                                                        plane.type = static_cast<char>(jPlane.at("type").get<int>());
+                                                    });
+        }
+
+        void LoadMaterials(const json& jMaterials, clipMap_t& clipMap) const
+        {
+            clipMap.numMaterials = static_cast<unsigned>(jMaterials.size());
+            clipMap.materials = world::Array<ClipMaterial>(m_memory,
+                                                           jMaterials,
+                                                           [this](const json& jMaterial, ClipMaterial& material)
+                                                           {
+                                                               const auto& name = jMaterial.at("name").get_ref<const std::string&>();
+                                                               material.name = !name.empty() ? m_memory.Dup(name.c_str()) : nullptr;
+
+                                                               jMaterial.at("surfaceFlags").get_to(material.surfaceFlags);
+                                                               jMaterial.at("contents").get_to(material.contents);
+                                                           });
+        }
+
+        void LoadBrushSides(const json& jBrushSides, clipMap_t& clipMap) const
+        {
+            clipMap.numBrushSides = static_cast<unsigned>(jBrushSides.size());
+            clipMap.brushsides =
+                world::Array<cbrushside_t>(m_memory,
+                                           jBrushSides,
+                                           [&clipMap](const json& jSide, cbrushside_t& side)
+                                           {
+                                               side.plane =
+                                                   PointerInto(jSide.at("plane"), clipMap.planes, static_cast<size_t>(clipMap.planeCount), "Brush side plane");
+                                               jSide.at("materialNum").get_to(side.materialNum);
+                                               side.firstAdjacentSideOffset = static_cast<char>(jSide.at("firstAdjacentSideOffset").get<int>());
+                                               side.edgeCount = static_cast<char>(jSide.at("edgeCount").get<int>());
+                                           });
+        }
+
+        void LoadNodes(const json& jNodes, clipMap_t& clipMap) const
+        {
+            clipMap.numNodes = static_cast<unsigned>(jNodes.size());
+            clipMap.nodes = world::Array<cNode_t>(m_memory,
+                                                  jNodes,
+                                                  [&clipMap](const json& jNode, cNode_t& node)
+                                                  {
+                                                      node.plane =
+                                                          PointerInto(jNode.at("plane"), clipMap.planes, static_cast<size_t>(clipMap.planeCount), "Node plane");
+                                                      world::ArrayOfSize(jNode.at("children"), node.children);
+                                                  });
+        }
+
+        static void LoadLeaf(const json& jLeaf, cLeaf_t& leaf)
+        {
+            jLeaf.at("firstCollAabbIndex").get_to(leaf.firstCollAabbIndex);
+            jLeaf.at("collAabbCount").get_to(leaf.collAabbCount);
+            jLeaf.at("brushContents").get_to(leaf.brushContents);
+            jLeaf.at("terrainContents").get_to(leaf.terrainContents);
+            world::Bounds(jLeaf.at("bounds"), leaf.bounds);
+            jLeaf.at("leafBrushNode").get_to(leaf.leafBrushNode);
+        }
+
+        void LoadLeafs(const json& jLeafs, clipMap_t& clipMap) const
+        {
+            clipMap.numLeafs = static_cast<unsigned>(jLeafs.size());
+            clipMap.leafs = world::Array<cLeaf_t>(m_memory,
+                                                  jLeafs,
+                                                  [](const json& jLeaf, cLeaf_t& leaf)
+                                                  {
+                                                      LoadLeaf(jLeaf, leaf);
+                                                  });
+        }
+
+        void LoadLeafBrushNodes(const json& jNodes, clipMap_t& clipMap) const
+        {
+            clipMap.leafbrushNodesCount = static_cast<unsigned>(jNodes.size());
+            clipMap.leafbrushNodes = world::Array<cLeafBrushNode_s>(m_memory,
+                                                                    jNodes,
+                                                                    [this, &clipMap](const json& jNode, cLeafBrushNode_s& node)
+                                                                    {
+                                                                        LoadLeafBrushNode(jNode, node, clipMap);
+                                                                    });
+        }
+
+        void LoadLeafBrushNode(const json& jNode, cLeafBrushNode_s& node, const clipMap_t& clipMap) const
+        {
+            node.axis = static_cast<char>(jNode.at("axis").get<int>());
+            jNode.at("leafBrushCount").get_to(node.leafBrushCount);
+            jNode.at("contents").get_to(node.contents);
+
+            if (node.leafBrushCount <= 0)
+            {
+                node.data.children.dist = jNode.at("dist").get<float>();
+                node.data.children.range = jNode.at("range").get<float>();
+                world::ArrayOfSize(jNode.at("childOffset"), node.data.children.childOffset);
+                return;
+            }
+
+            const auto jFirstBrush = jNode.find("firstBrush");
+            if (jFirstBrush != jNode.end())
+            {
+                node.data.leaf.brushes = PointerInto(*jFirstBrush, clipMap.leafbrushes, clipMap.numLeafBrushes, "Leaf brush node first brush");
+                return;
+            }
+
+            node.data.leaf.brushes = world::Array<LeafBrush>(m_memory, jNode.at("brushes"));
+        }
+
+        void LoadTriangles(const json& jRoot, clipMap_t& clipMap) const
+        {
+            jRoot.at("triCount").get_to(clipMap.triCount);
+
+            const auto triIndexCount = static_cast<size_t>(clipMap.triCount) * 3u;
+            clipMap.triIndices = static_cast<uint16_t*>(world::Base64(m_memory, jRoot.at("triIndices"), triIndexCount * sizeof(uint16_t)));
+
+            const auto walkableByteCount = static_cast<size_t>((3 * clipMap.triCount + 31) / 32) * 4u;
+            clipMap.triEdgeIsWalkable = static_cast<char*>(world::Base64(m_memory, jRoot.at("triEdgeIsWalkable"), walkableByteCount));
+        }
+
+        void LoadBorders(const json& jBorders, clipMap_t& clipMap) const
+        {
+            clipMap.borderCount = static_cast<int>(jBorders.size());
+            clipMap.borders = world::Array<CollisionBorder>(m_memory,
+                                                            jBorders,
+                                                            [](const json& jBorder, CollisionBorder& border)
+                                                            {
+                                                                world::Vec(jBorder.at("distEq"), border.distEq);
+                                                                jBorder.at("zBase").get_to(border.zBase);
+                                                                jBorder.at("zSlope").get_to(border.zSlope);
+                                                                jBorder.at("start").get_to(border.start);
+                                                                jBorder.at("length").get_to(border.length);
+                                                            });
+        }
+
+        void LoadPartitions(const json& jPartitions, clipMap_t& clipMap) const
+        {
+            clipMap.partitionCount = static_cast<int>(jPartitions.size());
+            clipMap.partitions = world::Array<CollisionPartition>(
+                m_memory,
+                jPartitions,
+                [&clipMap](const json& jPartition, CollisionPartition& partition)
+                {
+                    partition.triCount = static_cast<char>(jPartition.at("triCount").get<int>());
+                    partition.borderCount = static_cast<char>(jPartition.at("borderCount").get<int>());
+                    partition.firstVertSegment = static_cast<char>(jPartition.at("firstVertSegment").get<int>());
+                    jPartition.at("firstTri").get_to(partition.firstTri);
+
+                    partition.borders =
+                        PointerInto(jPartition.at("firstBorder"), clipMap.borders, static_cast<size_t>(clipMap.borderCount), "Partition first border");
+                });
+        }
+
+        void LoadAabbTrees(const json& jTrees, clipMap_t& clipMap) const
+        {
+            clipMap.aabbTreeCount = static_cast<int>(jTrees.size());
+            clipMap.aabbTrees = world::Array<CollisionAabbTree>(m_memory,
+                                                                jTrees,
+                                                                [](const json& jTree, CollisionAabbTree& tree)
+                                                                {
+                                                                    world::Vec(jTree.at("midPoint"), tree.midPoint);
+                                                                    jTree.at("materialIndex").get_to(tree.materialIndex);
+                                                                    jTree.at("childCount").get_to(tree.childCount);
+                                                                    world::Vec(jTree.at("halfSize"), tree.halfSize);
+
+                                                                    if (tree.childCount)
+                                                                        jTree.at("firstChildIndex").get_to(tree.u.firstChildIndex);
+                                                                    else
+                                                                        jTree.at("partitionIndex").get_to(tree.u.partitionIndex);
+                                                                });
+        }
+
+        void LoadCModels(const json& jModels, clipMap_t& clipMap) const
+        {
+            clipMap.numSubModels = static_cast<unsigned>(jModels.size());
+            clipMap.cmodels = world::Array<cmodel_t>(m_memory,
+                                                     jModels,
+                                                     [](const json& jModel, cmodel_t& model)
+                                                     {
+                                                         world::Bounds(jModel.at("bounds"), model.bounds);
+                                                         jModel.at("radius").get_to(model.radius);
+                                                         LoadLeaf(jModel.at("leaf"), model.leaf);
+                                                     });
+        }
+
+        void LoadBrushes(const json& jRoot, clipMap_t& clipMap) const
+        {
+            const auto& jBrushes = jRoot.at("brushes");
+            clipMap.numBrushes = static_cast<uint16_t>(jBrushes.size());
+            clipMap.brushes = world::Array<cbrush_array_t>(m_memory,
+                                                           jBrushes,
+                                                           [&clipMap](const json& jBrush, cbrush_t& brush)
+                                                           {
+                                                               LoadBrush(jBrush, brush, clipMap);
+                                                           });
+
+            const auto& jBrushBounds = jRoot.at("brushBounds");
+            if (jBrushBounds.size() != clipMap.numBrushes)
+                throw world::LoadException(std::format("Clipmap has {} brushes but {} brush bounds", clipMap.numBrushes, jBrushBounds.size()));
+
+            clipMap.brushBounds = world::Array<BoundsArray>(m_memory,
+                                                            jBrushBounds,
+                                                            [](const json& jBounds, Bounds& bounds)
+                                                            {
+                                                                world::Bounds(jBounds, bounds);
+                                                            });
+
+            const auto& jBrushContents = jRoot.at("brushContents");
+            if (jBrushContents.size() != clipMap.numBrushes)
+                throw world::LoadException(std::format("Clipmap has {} brushes but {} brush contents", clipMap.numBrushes, jBrushContents.size()));
+
+            clipMap.brushContents = world::Array<int>(m_memory, jBrushContents);
+        }
+
+        static void LoadBrush(const json& jBrush, cbrush_t& brush, const clipMap_t& clipMap)
+        {
+            jBrush.at("numsides").get_to(brush.numsides);
+            jBrush.at("glassPieceIndex").get_to(brush.glassPieceIndex);
+
+            brush.sides = PointerInto(jBrush.at("firstSide"), clipMap.brushsides, clipMap.numBrushSides, "Brush first side");
+            brush.baseAdjacentSide = PointerInto(jBrush.at("baseAdjacentSide"), clipMap.brushEdges, clipMap.numBrushEdges, "Brush base adjacent side");
+
+            world::ArrayOfSize(jBrush.at("axialMaterialNum"),
+                               brush.axialMaterialNum,
+                               [](const json& jSide, int16_t (&materialNum)[3])
+                               {
+                                   world::ArrayOfSize(jSide, materialNum);
+                               });
+
+            LoadBrushBytes(jBrush.at("firstAdjacentSideOffsets"), brush.firstAdjacentSideOffsets);
+            LoadBrushBytes(jBrush.at("edgeCount"), brush.edgeCount);
+        }
+
+        static void LoadBrushBytes(const json& jValues, char (&values)[2][3])
+        {
+            world::ArrayOfSize(jValues,
+                               values,
+                               [](const json& jSide, char (&side)[3])
+                               {
+                                   int sideValues[3];
+                                   world::ArrayOfSize(jSide, sideValues);
+
+                                   for (auto i = 0u; i < std::extent_v<decltype(sideValues)>; i++)
+                                       side[i] = static_cast<char>(sideValues[i]);
+                               });
+        }
+
+        void LoadSModelNodes(const json& jNodes, clipMap_t& clipMap) const
+        {
+            clipMap.smodelNodeCount = static_cast<uint16_t>(jNodes.size());
+            clipMap.smodelNodes = world::Array<SModelAabbNode>(m_memory,
+                                                               jNodes,
+                                                               [](const json& jNode, SModelAabbNode& node)
+                                                               {
+                                                                   world::Bounds(jNode.at("bounds"), node.bounds);
+                                                                   jNode.at("firstChild").get_to(node.firstChild);
+                                                                   jNode.at("childCount").get_to(node.childCount);
+                                                               });
+        }
+
+        bool LoadStaticModels(const json& jModels, clipMap_t& clipMap) const
+        {
+            auto success = true;
+
+            clipMap.numStaticModels = static_cast<unsigned>(jModels.size());
+            clipMap.staticModelList = world::Array<cStaticModel_s>(m_memory,
+                                                                   jModels,
+                                                                   [this, &success](const json& jModel, cStaticModel_s& model)
+                                                                   {
+                                                                       success = LoadReference<AssetXModel>(jModel, "xmodel", model.xmodel) && success;
+
+                                                                       world::Vec(jModel.at("origin"), model.origin);
+                                                                       world::ArrayOfSize(jModel.at("invScaledAxis"),
+                                                                                          model.invScaledAxis,
+                                                                                          [](const json& jAxis, float (&axis)[3])
+                                                                                          {
+                                                                                              world::Vec(jAxis, axis);
+                                                                                          });
+                                                                       world::Bounds(jModel.at("absBounds"), model.absBounds);
+                                                                   });
+
+            return success;
+        }
+
+        bool LoadDynEntities(const json& jLists, clipMap_t& clipMap) const
+        {
+            if (jLists.size() != std::extent_v<decltype(clipMap.dynEntDefList)>)
+                throw world::LoadException(
+                    std::format("Clipmap has {} dynamic entity lists instead of {}", jLists.size(), std::extent_v<decltype(clipMap.dynEntDefList)>));
+
+            auto success = true;
+            for (auto list = 0u; list < std::extent_v<decltype(clipMap.dynEntDefList)>; list++)
+            {
+                const auto& jDefs = jLists[list];
+                clipMap.dynEntCount[list] = static_cast<uint16_t>(jDefs.size());
+                clipMap.dynEntDefList[list] = world::Array<DynEntityDef>(m_memory,
+                                                                         jDefs,
+                                                                         [this, &success](const json& jDef, DynEntityDef& def)
+                                                                         {
+                                                                             success = LoadDynEntity(jDef, def) && success;
+                                                                         });
+
+                if (clipMap.dynEntCount[list] > 0u)
+                {
+                    clipMap.dynEntPoseList[list] = m_memory.Alloc<DynEntityPose>(clipMap.dynEntCount[list]);
+                    clipMap.dynEntClientList[list] = m_memory.Alloc<DynEntityClient>(clipMap.dynEntCount[list]);
+                    clipMap.dynEntCollList[list] = m_memory.Alloc<DynEntityColl>(clipMap.dynEntCount[list]);
+                }
+            }
+
+            return success;
+        }
+
+        bool LoadDynEntity(const json& jDef, DynEntityDef& def) const
+        {
+            def.type = static_cast<DynEntityType>(jDef.at("type").get<int>());
+
+            const auto& jPose = jDef.at("pose");
+            world::Vec(jPose.at("quat"), def.pose.quat);
+            world::Vec(jPose.at("origin"), def.pose.origin);
+
+            jDef.at("brushModel").get_to(def.brushModel);
+            jDef.at("physicsBrushModel").get_to(def.physicsBrushModel);
+            jDef.at("health").get_to(def.health);
+            jDef.at("contents").get_to(def.contents);
+
+            const auto& jMass = jDef.at("mass");
+            world::Vec(jMass.at("centerOfMass"), def.mass.centerOfMass);
+            world::Vec(jMass.at("momentsOfInertia"), def.mass.momentsOfInertia);
+            world::Vec(jMass.at("productsOfInertia"), def.mass.productsOfInertia);
+
+            return LoadReference<AssetXModel>(jDef, "xModel", def.xModel) && LoadReference<AssetFx>(jDef, "destroyFx", def.destroyFx)
+                   && LoadReference<AssetPhysPreset>(jDef, "physPreset", def.physPreset);
+        }
+
+        template<typename AssetType> bool LoadReference(const json& jParent, const char* key, typename AssetType::Type*& reference) const
+        {
+            const auto& name = jParent.at(key).get_ref<const std::string&>();
+            if (name.empty())
+            {
+                reference = nullptr;
+                return true;
+            }
+
+            auto* asset = m_context.LoadDependency<AssetType>(name);
+            if (!asset)
+            {
+                con::error("Could not find {} \"{}\" of {}", key, name, m_type_name);
+                return false;
+            }
+
+            m_registration.AddDependency(asset);
+            reference = asset->Asset();
+
+            return true;
+        }
+
+        std::istream& m_stream;
+        MemoryManager& m_memory;
+        AssetCreationContext& m_context;
+        GenericAssetRegistration& m_registration;
+        const char* m_type_name;
+    };
+
+    template<typename AssetType> class ClipMapLoader final : public AssetCreator<AssetType>
+    {
+    public:
+        ClipMapLoader(MemoryManager& memory, ISearchPath& searchPath, std::string (*fileNameForAsset)(const std::string&), const char* typeName)
+            : m_memory(memory),
+              m_search_path(searchPath),
+              m_file_name_for_asset(fileNameForAsset),
+              m_type_name(typeName)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(m_file_name_for_asset(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* clipMap = m_memory.Alloc<clipMap_t>();
+            clipMap->name = m_memory.Dup(assetName.c_str());
+
+            AssetRegistration<AssetType> registration(assetName, clipMap);
+
+            const JsonLoader loader(*file.m_stream, m_memory, context, registration, m_type_name);
+            if (!loader.Load(*clipMap))
+                return AssetCreationResult::Failure();
+
+            return AssetCreationResult::Success(context.AddAsset(std::move(registration)));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+        std::string (*m_file_name_for_asset)(const std::string&);
+        const char* m_type_name;
+    };
+} // namespace
+
+namespace world
+{
+    std::unique_ptr<AssetCreator<AssetClipMapSp>> CreateClipMapSpLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<ClipMapLoader<AssetClipMapSp>>(memory, searchPath, GetClipMapSpJsonFileName, "clipmap_sp");
+    }
+
+    std::unique_ptr<AssetCreator<AssetClipMapMp>> CreateClipMapMpLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<ClipMapLoader<AssetClipMapMp>>(memory, searchPath, GetClipMapMpJsonFileName, "clipmap_mp");
+    }
+} // namespace world
