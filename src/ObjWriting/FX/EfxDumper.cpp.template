@@ -13,9 +13,11 @@
 
 #include FLAGS_HEADER
 #include "Dumping/ReferencedAssetName.h"
+#include "FX/FxCommon.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <format>
 #include <ostream>
 #include <string>
@@ -25,7 +27,7 @@ using namespace GAME;
 
 namespace
 {
-    constexpr auto FORMAT_VERSION = 2;
+    constexpr auto FORMAT_VERSION = 3;
 
     [[nodiscard]] const char* ElemTypeKey(const unsigned char elemType)
     {
@@ -89,10 +91,21 @@ namespace
             return index < fx.elemDefCountLooping;
         }
 
+        [[nodiscard]] static const char* ElemClass(const FxEffectDef& fx, const int index)
+        {
+            if (IsLooping(fx, index))
+                return "looping";
+
+            return index < fx.elemDefCountLooping + fx.elemDefCountOneShot ? "oneShot" : "emission";
+        }
+
         void WriteElem(const FxEffectDef& fx, const FxElemDef& elem, const int index)
         {
             Key("name");
             m_stream << "\"\";\n";
+
+            Key("elemClass");
+            m_stream << ElemClass(fx, index) << ";\n";
 
             WriteFlags(elem);
 
@@ -138,10 +151,14 @@ namespace
             WriteVisGraphs(elem);
 
             Scalar("lightingFrac", static_cast<float>(static_cast<unsigned char>(elem.lightingFrac)) / 255.0f);
+            Key("useItemClip");
+            m_stream << static_cast<int>(elem.useItemClip) << ";\n";
+            Key("fadeInfo");
+            m_stream << static_cast<int>(elem.fadeInfo) << ";\n";
 
             Key("collOffset");
             const auto& mins = elem.collBounds.midPoint;
-            m_stream << mins.x << ' ' << mins.y << ' ' << mins.z << ";\n";
+            m_stream << Float(mins.x) << ' ' << Float(mins.y) << ' ' << Float(mins.z) << ";\n";
             Scalar("collRadius", std::max({elem.collBounds.halfSize.x, elem.collBounds.halfSize.y, elem.collBounds.halfSize.z}));
 
             EffectRef("fxOnImpact", elem.effectOnImpact);
@@ -218,6 +235,11 @@ namespace
             Key("flags");
             for (auto i = 0u; i < tokens.size(); i++)
                 m_stream << (i ? " " : "") << tokens[i];
+
+            const auto unrecovered = static_cast<uint32_t>(elem.flags) & UNRECOVERED_MASK;
+            if (unrecovered)
+                m_stream << (tokens.empty() ? "" : " ") << std::format("{:#x}", unrecovered);
+
             m_stream << ";\n";
         }
 
@@ -269,8 +291,15 @@ namespace
                     for (const auto component : frame)
                         scale = std::max(scale, std::fabs(component));
 
+            if (scale > 0.0f)
+            {
+                int exponent;
+                std::frexp(scale, &exponent);
+                scale = std::ldexp(1.0f, exponent);
+            }
+
             Key(key);
-            m_stream << scale << "\n\t{\n";
+            m_stream << Float(scale) << "\n\t{\n";
             WriteCurve(base, scale);
             WriteCurve(amplitude, scale);
             m_stream << "\t};\n";
@@ -283,22 +312,19 @@ namespace
             for (auto i = 0u; i < curve.size(); i++)
             {
                 const auto time = intervals ? static_cast<float>(i) / static_cast<float>(intervals) : 0.0f;
-                m_stream << "\t\t\t" << time;
+                m_stream << "\t\t\t" << Float(time);
                 for (const auto component : curve[i])
-                    m_stream << ' ' << (scale != 0.0f ? component / scale : 0.0f);
+                    m_stream << ' ' << Float(scale != 0.0f ? component / scale : 0.0f);
                 m_stream << '\n';
             }
             m_stream << "\t\t}\n";
         }
 
-        void EmptyGraph(const char* key, const unsigned components)
-        {
-            const std::vector<std::vector<float>> curve(2, std::vector<float>(components, 0.0f));
-            Graph(key, curve, curve);
-        }
-
         void WriteVelGraphs(const FxElemDef& elem)
         {
+            if (!elem.velSamples)
+                return;
+
             const auto frames = static_cast<unsigned char>(elem.velIntervalCount) + 1u;
 
             static constexpr const char* KEYS[2][3]{
@@ -310,12 +336,6 @@ namespace
             {
                 for (auto axis = 0u; axis < 3u; axis++)
                 {
-                    if (!elem.velSamples)
-                    {
-                        EmptyGraph(KEYS[frame][axis], 1u);
-                        continue;
-                    }
-
                     std::vector<std::vector<float>> base;
                     std::vector<std::vector<float>> amplitude;
 
@@ -334,16 +354,10 @@ namespace
 
         void WriteVisGraphs(const FxElemDef& elem)
         {
-            const auto frames = static_cast<unsigned char>(elem.visStateIntervalCount) + 1u;
-
             if (!elem.visSamples)
-            {
-                for (const auto* key : {"rotGraph", "sizeGraph0", "sizeGraph1", "scaleGraph"})
-                    EmptyGraph(key, 1u);
-                EmptyGraph("colorGraph", 3u);
-                EmptyGraph("alphaGraph", 1u);
                 return;
-            }
+
+            const auto frames = static_cast<unsigned char>(elem.visStateIntervalCount) + 1u;
 
             const auto collect = [&](auto&& pick)
             {
@@ -396,10 +410,31 @@ namespace
             const auto* trail = static_cast<unsigned char>(elem.elemType) == FX_ELEM_TYPE_TRAIL ? elem.extended.trailDef : nullptr;
 
             Scalar("trailSplitDist", trail && trail->invSplitDist != 0.0f ? 1.0f / trail->invSplitDist : 0.0f);
+            Scalar("trailSplitArcDist", trail && trail->invSplitArcDist != 0.0f ? 1.0f / trail->invSplitArcDist : 0.0f);
+            Scalar("trailSplitTime", trail && trail->invSplitTime != 0.0f ? 1.0f / trail->invSplitTime : 0.0f);
             Key("trailScrollTime");
-            m_stream << (trail ? static_cast<float>(trail->scrollTimeMsec) / 1000.0f : 0.0f) << ";\n";
+            m_stream << Float(trail ? static_cast<float>(trail->scrollTimeMsec) / 1000.0f : 0.0f) << ";\n";
             Key("trailRepeatDist");
             m_stream << (trail ? trail->repeatDist : 0) << ";\n";
+
+            if (!trail)
+                return;
+
+            Key("trailVerts");
+            m_stream << "\n\t{\n";
+            for (auto i = 0; i < trail->vertCount; i++)
+            {
+                const auto& vert = trail->verts[i];
+                m_stream << "\t\t" << Float(vert.pos[0]) << ' ' << Float(vert.pos[1]) << ' ' << Float(vert.normal[0]) << ' '
+                         << Float(vert.normal[1]) << ' ' << Float(vert.texCoord) << '\n';
+            }
+            m_stream << "\t};\n";
+
+            Key("trailInds");
+            m_stream << "\n\t{\n";
+            for (auto i = 0; i < trail->indCount; i++)
+                m_stream << "\t\t" << trail->inds[i] << '\n';
+            m_stream << "\t};\n";
         }
 
         void WriteVisuals(const FxElemDef& elem)
@@ -456,16 +491,21 @@ namespace
             m_stream << '\t' << key << ' ';
         }
 
+        [[nodiscard]] static std::string Float(const float value)
+        {
+            return std::format("{}", value);
+        }
+
         void Scalar(const char* key, const float value)
         {
             Key(key);
-            m_stream << value << ";\n";
+            m_stream << Float(value) << ";\n";
         }
 
         void Range(const char* key, const FxFloatRange& range)
         {
             Key(key);
-            m_stream << range.base << ' ' << range.amplitude << ";\n";
+            m_stream << Float(range.base) << ' ' << Float(range.amplitude) << ";\n";
         }
 
         void IntRange(const char* key, const FxIntRange& range)
@@ -491,7 +531,7 @@ namespace fx
     void CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetFx::Type>& asset)
     {
         const auto* fx = asset.Asset();
-        const auto assetFile = context.OpenAssetFile(std::format("fx/{}.efx", fx->name));
+        const auto assetFile = context.OpenAssetFile(fx::GetEfxFileNameForAssetName(fx->name));
         if (!assetFile)
             return;
 

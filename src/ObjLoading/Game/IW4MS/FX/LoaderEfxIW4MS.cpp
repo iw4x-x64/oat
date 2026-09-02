@@ -1,0 +1,989 @@
+#include "LoaderEfxIW4MS.h"
+
+#include "EfxReader.h"
+#include "FX/FxCommon.h"
+#include "Game/IW4MS/FX/FxElemFlagsIW4MS.h"
+#include "Utils/Logging/Log.h"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <cstring>
+#include <format>
+#include <limits>
+#include <unordered_map>
+#include <vector>
+
+using namespace IW4MS;
+
+namespace
+{
+    constexpr auto FORMAT_VERSION = 3;
+
+    struct ElemSource
+    {
+        FxElemDef def{};
+        int elemClass = 0;
+        std::unordered_map<std::string, fx::EfxGraph> graphs;
+        std::vector<std::string> visualNames;
+        std::string effectOnImpact;
+        std::string effectOnDeath;
+        std::string effectEmitted;
+        float trailSplitDist = 0.0f;
+        float trailSplitArcDist = 0.0f;
+        float trailSplitTime = 0.0f;
+        float trailScrollTime = 0.0f;
+        int trailRepeatDist = 0;
+        std::vector<FxTrailVertex> trailVerts;
+        std::vector<uint16_t> trailInds;
+        bool isTrail = false;
+    };
+
+    [[nodiscard]] bool ElemTypeOfKey(const std::string& key, unsigned char& elemType)
+    {
+        static const std::unordered_map<std::string, unsigned char> KEYS{
+            {"billboardSprite", FX_ELEM_TYPE_SPRITE_BILLBOARD},
+            {"orientedSprite",  FX_ELEM_TYPE_SPRITE_ORIENTED },
+            {"tail",            FX_ELEM_TYPE_TAIL            },
+            {"trail",           FX_ELEM_TYPE_TRAIL           },
+            {"cloud",           FX_ELEM_TYPE_CLOUD           },
+            {"sparkCloud",      FX_ELEM_TYPE_SPARK_CLOUD     },
+            {"sparkFountain",   FX_ELEM_TYPE_SPARK_FOUNTAIN  },
+            {"model",           FX_ELEM_TYPE_MODEL           },
+            {"light",           FX_ELEM_TYPE_OMNI_LIGHT      },
+            {"spotLight",       FX_ELEM_TYPE_SPOT_LIGHT      },
+            {"sound",           FX_ELEM_TYPE_SOUND           },
+            {"decal",           FX_ELEM_TYPE_DECAL           },
+            {"runner",          FX_ELEM_TYPE_RUNNER          },
+        };
+
+        const auto found = KEYS.find(key);
+        if (found == KEYS.end())
+            return false;
+
+        elemType = found->second;
+
+        return true;
+    }
+
+    [[nodiscard]] float SampleCurve(const std::vector<fx::EfxCurvePoint>& curve, const float time, const size_t component)
+    {
+        if (curve.empty())
+            return 0.0f;
+
+        if (time <= curve.front().time)
+            return curve.front().components[component];
+
+        for (auto i = 1u; i < curve.size(); i++)
+        {
+            const auto& previous = curve[i - 1u];
+            const auto& current = curve[i];
+
+            if (time > current.time)
+                continue;
+
+            if (time == current.time)
+                return current.components[component];
+
+            const auto span = current.time - previous.time;
+            if (span <= 0.0f)
+                return current.components[component];
+
+            const auto fraction = (time - previous.time) / span;
+
+            return previous.components[component] + (current.components[component] - previous.components[component]) * fraction;
+        }
+
+        return curve.back().components[component];
+    }
+
+    [[nodiscard]] char ColorByte(const float value)
+    {
+        return static_cast<char>(static_cast<unsigned char>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f)));
+    }
+
+    class EfxLoader
+    {
+    public:
+        EfxLoader(MemoryManager& memory, AssetCreationContext& context, AssetRegistration<AssetFx>& registration)
+            : m_memory(memory),
+              m_context(context),
+              m_registration(registration)
+        {
+        }
+
+        bool Load(std::istream& stream, FxEffectDef& fx)
+        {
+            try
+            {
+                fx::EfxReader reader(stream);
+
+                reader.Expect("iwfx");
+                const auto version = reader.NextInt();
+                if (version != FORMAT_VERSION)
+                {
+                    con::error("Tried to load fx \"{}\" but found format version {} instead of {}", fx.name, version, FORMAT_VERSION);
+                    return false;
+                }
+
+                std::vector<ElemSource> elems;
+                while (!reader.AtEnd())
+                {
+                    reader.Expect("{");
+                    elems.emplace_back();
+                    ReadElem(reader, elems.back());
+                }
+
+                return CreateEffect(elems, fx);
+            }
+            catch (const fx::EfxParseException& e)
+            {
+                con::error("Failed to parse fx \"{}\": {}", fx.name, e.what());
+            }
+
+            return false;
+        }
+
+    private:
+        static void ReadElem(fx::EfxReader& reader, ElemSource& elem)
+        {
+            while (reader.Peek() != "}")
+            {
+                const auto key = reader.Next();
+                ReadElemKey(reader, elem, key);
+            }
+
+            reader.Expect("}");
+        }
+
+        static void ReadElemKey(fx::EfxReader& reader, ElemSource& elem, const std::string& key)
+        {
+            auto& def = elem.def;
+
+            unsigned char elemType;
+            if (ElemTypeOfKey(key, elemType))
+            {
+                def.elemType = static_cast<char>(elemType);
+                elem.isTrail = elemType == FX_ELEM_TYPE_TRAIL;
+                ReadVisuals(reader, elem);
+                return;
+            }
+
+            if (key.starts_with("velGraph") || key.ends_with("Graph") || key.ends_with("Graph0") || key.ends_with("Graph1"))
+            {
+                elem.graphs.emplace(key, ReadGraph(reader, key == "colorGraph" ? 3u : 1u));
+                return;
+            }
+
+            if (key == "name")
+            {
+                reader.Next();
+                reader.EndStatement();
+            }
+            else if (key == "elemClass")
+            {
+                const auto& value = reader.Next();
+                elem.elemClass = value == "looping" ? 0 : (value == "oneShot" ? 1 : 2);
+                reader.EndStatement();
+            }
+            else if (key == "flags")
+            {
+                def.flags = ReadFlags(reader);
+            }
+            else if (key == "spawnRange")
+                def.spawnRange = ReadFloatRange(reader);
+            else if (key == "fadeInRange")
+                def.fadeInRange = ReadFloatRange(reader);
+            else if (key == "fadeOutRange")
+                def.fadeOutRange = ReadFloatRange(reader);
+            else if (key == "spawnFrustumCullRadius")
+                def.spawnFrustumCullRadius = ReadFloat(reader);
+            else if (key == "spawnLooping")
+            {
+                def.spawn.looping.intervalMsec = reader.NextInt();
+                def.spawn.looping.count = reader.NextInt();
+                reader.EndStatement();
+            }
+            else if (key == "spawnOneShot")
+            {
+                FxIntRange count{};
+                count.base = reader.NextInt();
+                count.amplitude = reader.NextInt();
+                reader.EndStatement();
+
+                if (elem.elemClass != 0)
+                    def.spawn.oneShot.count = count;
+            }
+            else if (key == "spawnDelayMsec")
+                def.spawnDelayMsec = ReadIntRange(reader);
+            else if (key == "lifeSpanMsec")
+                def.lifeSpanMsec = ReadIntRange(reader);
+            else if (key == "spawnOrgX")
+                def.spawnOrigin[0] = ReadFloatRange(reader);
+            else if (key == "spawnOrgY")
+                def.spawnOrigin[1] = ReadFloatRange(reader);
+            else if (key == "spawnOrgZ")
+                def.spawnOrigin[2] = ReadFloatRange(reader);
+            else if (key == "spawnOffsetRadius")
+                def.spawnOffsetRadius = ReadFloatRange(reader);
+            else if (key == "spawnOffsetHeight")
+                def.spawnOffsetHeight = ReadFloatRange(reader);
+            else if (key == "spawnAnglePitch")
+                def.spawnAngles[0] = ReadFloatRange(reader);
+            else if (key == "spawnAngleYaw")
+                def.spawnAngles[1] = ReadFloatRange(reader);
+            else if (key == "spawnAngleRoll")
+                def.spawnAngles[2] = ReadFloatRange(reader);
+            else if (key == "angleVelPitch")
+                def.angularVelocity[0] = ReadFloatRange(reader);
+            else if (key == "angleVelYaw")
+                def.angularVelocity[1] = ReadFloatRange(reader);
+            else if (key == "angleVelRoll")
+                def.angularVelocity[2] = ReadFloatRange(reader);
+            else if (key == "initialRot")
+                def.initialRotation = ReadFloatRange(reader);
+            else if (key == "gravity")
+                def.gravity = ReadFloatRange(reader);
+            else if (key == "elasticity")
+                def.reflectionFactor = ReadFloatRange(reader);
+            else if (key == "atlasBehavior")
+                def.atlas.behavior = ReadAtlasBehavior(reader);
+            else if (key == "atlasIndex")
+                def.atlas.index = static_cast<char>(ReadInt(reader));
+            else if (key == "atlasFps")
+                def.atlas.fps = static_cast<char>(ReadInt(reader));
+            else if (key == "atlasLoopCount")
+                def.atlas.loopCount = static_cast<char>(ReadInt(reader));
+            else if (key == "atlasColIndexBits")
+                def.atlas.colIndexBits = static_cast<char>(ReadInt(reader));
+            else if (key == "atlasRowIndexBits")
+                def.atlas.rowIndexBits = static_cast<char>(ReadInt(reader));
+            else if (key == "atlasEntryCount")
+                def.atlas.entryCount = static_cast<int16_t>(ReadInt(reader));
+            else if (key == "lightingFrac")
+                def.lightingFrac = ColorByte(ReadFloat(reader));
+            else if (key == "useItemClip")
+                def.useItemClip = static_cast<char>(ReadInt(reader));
+            else if (key == "fadeInfo")
+                def.fadeInfo = static_cast<char>(ReadInt(reader));
+            else if (key == "collOffset")
+            {
+                def.collBounds.midPoint.x = reader.NextFloat();
+                def.collBounds.midPoint.y = reader.NextFloat();
+                def.collBounds.midPoint.z = reader.NextFloat();
+                reader.EndStatement();
+            }
+            else if (key == "collRadius")
+            {
+                const auto radius = ReadFloat(reader);
+                def.collBounds.halfSize.x = radius;
+                def.collBounds.halfSize.y = radius;
+                def.collBounds.halfSize.z = radius;
+            }
+            else if (key == "fxOnImpact")
+                elem.effectOnImpact = ReadString(reader);
+            else if (key == "fxOnDeath")
+                elem.effectOnDeath = ReadString(reader);
+            else if (key == "emission")
+                elem.effectEmitted = ReadString(reader);
+            else if (key == "sortOrder")
+                def.sortOrder = static_cast<char>(ReadInt(reader));
+            else if (key == "emitDist")
+                def.emitDist = ReadFloatRange(reader);
+            else if (key == "emitDistVariance")
+                def.emitDistVariance = ReadFloatRange(reader);
+            else if (key == "trailSplitDist")
+                elem.trailSplitDist = ReadFloat(reader);
+            else if (key == "trailSplitArcDist")
+                elem.trailSplitArcDist = ReadFloat(reader);
+            else if (key == "trailSplitTime")
+                elem.trailSplitTime = ReadFloat(reader);
+            else if (key == "trailScrollTime")
+                elem.trailScrollTime = ReadFloat(reader);
+            else if (key == "trailRepeatDist")
+                elem.trailRepeatDist = ReadInt(reader);
+            else if (key == "trailVerts")
+                ReadTrailVerts(reader, elem);
+            else if (key == "trailInds")
+                ReadTrailInds(reader, elem);
+            else
+                throw fx::EfxParseException(std::format("Unknown key \"{}\"", key));
+        }
+
+        static int ReadFlags(fx::EfxReader& reader)
+        {
+            using namespace fx_elem_flags;
+
+            auto flags = 0u;
+            while (reader.Peek() != ";")
+            {
+                const auto token = reader.Next();
+
+                if (token == "spawnRelative")
+                    flags |= SPAWN_RELATIVE;
+                else if (token == "spawnFrustumCull")
+                    flags |= SPAWN_FRUSTUM_CULL;
+                else if (token == "runnerUsesRandRot")
+                    flags |= RUNNER_USES_RAND_ROT;
+                else if (token == "spawnOffsetNone")
+                    flags |= static_cast<uint32_t>(SpawnOffset::NONE) << SPAWN_OFFSET_SHIFT;
+                else if (token == "spawnOffsetSphere")
+                    flags |= static_cast<uint32_t>(SpawnOffset::SPHERE) << SPAWN_OFFSET_SHIFT;
+                else if (token == "spawnOffsetCylinder")
+                    flags |= static_cast<uint32_t>(SpawnOffset::CYLINDER) << SPAWN_OFFSET_SHIFT;
+                else if (token == "runRelToWorld")
+                    flags |= static_cast<uint32_t>(RunRelTo::WORLD) << RUN_REL_TO_SHIFT;
+                else if (token == "runRelToSpawn")
+                    flags |= static_cast<uint32_t>(RunRelTo::SPAWN) << RUN_REL_TO_SHIFT;
+                else if (token == "runRelToEffect")
+                    flags |= static_cast<uint32_t>(RunRelTo::EFFECT) << RUN_REL_TO_SHIFT;
+                else if (token == "runRelToOffset")
+                    flags |= static_cast<uint32_t>(RunRelTo::OFFSET) << RUN_REL_TO_SHIFT;
+                else if (token == "useCollision")
+                    flags |= USE_COLLISION;
+                else if (token == "dieOnTouch")
+                    flags |= DIE_ON_TOUCH;
+                else if (token == "drawPastFog")
+                    flags |= DRAW_PAST_FOG;
+                else if (token == "drawWithViewModel")
+                    flags |= DRAW_WITH_VIEW_MODEL;
+                else if (token == "blocksSight")
+                    flags |= BLOCKS_SIGHT;
+                else if (token == "modelUsesPhysics")
+                    flags |= MODEL_USES_PHYSICS;
+                else if (token == "nonUniformScale")
+                    flags |= NON_UNIFORM_SCALE;
+                else if (token.starts_with("0x") || token.starts_with("0X"))
+                    flags |= static_cast<uint32_t>(std::stoul(token, nullptr, 16));
+                else
+                    throw fx::EfxParseException(std::format("Unknown element flag \"{}\"", token));
+            }
+
+            reader.Expect(";");
+
+            return static_cast<int>(flags);
+        }
+
+        static char ReadAtlasBehavior(fx::EfxReader& reader)
+        {
+            using namespace fx_atlas_behavior;
+
+            auto behavior = 0u;
+            while (reader.Peek() != ";")
+            {
+                const auto token = reader.Next();
+
+                if (token == "startFixed")
+                    behavior |= static_cast<uint8_t>(Start::FIXED);
+                else if (token == "startRandom")
+                    behavior |= static_cast<uint8_t>(Start::RANDOM);
+                else if (token == "startIndexed")
+                    behavior |= static_cast<uint8_t>(Start::INDEXED);
+                else if (token == "playOverLife")
+                    behavior |= PLAY_OVER_LIFE;
+                else if (token == "loopOnlyNTimes")
+                    behavior |= LOOP_ONLY_N_TIMES;
+                else
+                    throw fx::EfxParseException(std::format("Unknown atlas behavior \"{}\"", token));
+            }
+
+            reader.Expect(";");
+
+            return static_cast<char>(behavior);
+        }
+
+        static fx::EfxGraph ReadGraph(fx::EfxReader& reader, const unsigned components)
+        {
+            fx::EfxGraph graph{};
+            graph.scale = reader.NextFloat();
+
+            reader.Expect("{");
+            graph.base = ReadCurve(reader, components);
+            graph.amplitude = ReadCurve(reader, components);
+            reader.Expect("}");
+            reader.Expect(";");
+
+            return graph;
+        }
+
+        static std::vector<fx::EfxCurvePoint> ReadCurve(fx::EfxReader& reader, const unsigned components)
+        {
+            std::vector<fx::EfxCurvePoint> curve;
+
+            reader.Expect("{");
+            while (reader.Peek() != "}")
+            {
+                fx::EfxCurvePoint point{};
+                point.time = reader.NextFloat();
+                for (auto i = 0u; i < components; i++)
+                    point.components.push_back(reader.NextFloat());
+
+                curve.emplace_back(std::move(point));
+            }
+            reader.Expect("}");
+
+            return curve;
+        }
+
+        static void ReadVisuals(fx::EfxReader& reader, ElemSource& elem)
+        {
+            reader.Expect("{");
+            while (reader.Peek() != "}")
+                elem.visualNames.emplace_back(reader.Next());
+            reader.Expect("}");
+            reader.Expect(";");
+        }
+
+        static void ReadTrailVerts(fx::EfxReader& reader, ElemSource& elem)
+        {
+            reader.Expect("{");
+            while (reader.Peek() != "}")
+            {
+                FxTrailVertex vertex{};
+                vertex.pos[0] = reader.NextFloat();
+                vertex.pos[1] = reader.NextFloat();
+                vertex.normal[0] = reader.NextFloat();
+                vertex.normal[1] = reader.NextFloat();
+                vertex.texCoord = reader.NextFloat();
+
+                elem.trailVerts.push_back(vertex);
+            }
+            reader.Expect("}");
+            reader.Expect(";");
+        }
+
+        static void ReadTrailInds(fx::EfxReader& reader, ElemSource& elem)
+        {
+            reader.Expect("{");
+            while (reader.Peek() != "}")
+                elem.trailInds.push_back(static_cast<uint16_t>(reader.NextInt()));
+            reader.Expect("}");
+            reader.Expect(";");
+        }
+
+        static float ReadFloat(fx::EfxReader& reader)
+        {
+            const auto value = reader.NextFloat();
+            reader.Expect(";");
+
+            return value;
+        }
+
+        static int ReadInt(fx::EfxReader& reader)
+        {
+            const auto value = reader.NextInt();
+            reader.Expect(";");
+
+            return value;
+        }
+
+        static std::string ReadString(fx::EfxReader& reader)
+        {
+            auto value = reader.Next();
+            reader.Expect(";");
+
+            return value;
+        }
+
+        static FxFloatRange ReadFloatRange(fx::EfxReader& reader)
+        {
+            FxFloatRange range{};
+            range.base = reader.NextFloat();
+            range.amplitude = reader.NextFloat();
+            reader.Expect(";");
+
+            return range;
+        }
+
+        static FxIntRange ReadIntRange(fx::EfxReader& reader)
+        {
+            FxIntRange range{};
+            range.base = reader.NextInt();
+            range.amplitude = reader.NextInt();
+            reader.Expect(";");
+
+            return range;
+        }
+
+        bool CreateEffect(std::vector<ElemSource>& elems, FxEffectDef& fx)
+        {
+            std::vector<ElemSource*> ordered;
+            ordered.reserve(elems.size());
+            for (auto elemClass = 0; elemClass < 3; elemClass++)
+            {
+                for (auto& elem : elems)
+                {
+                    if (elem.elemClass == elemClass)
+                        ordered.push_back(&elem);
+                }
+            }
+
+            fx.elemDefCountLooping = static_cast<int>(std::ranges::count_if(elems,
+                                                                            [](const ElemSource& elem)
+                                                                            {
+                                                                                return elem.elemClass == 0;
+                                                                            }));
+            fx.elemDefCountOneShot = static_cast<int>(std::ranges::count_if(elems,
+                                                                            [](const ElemSource& elem)
+                                                                            {
+                                                                                return elem.elemClass == 1;
+                                                                            }));
+            fx.elemDefCountEmission = static_cast<int>(std::ranges::count_if(elems,
+                                                                             [](const ElemSource& elem)
+                                                                             {
+                                                                                 return elem.elemClass == 2;
+                                                                             }));
+
+            if (ordered.empty())
+            {
+                fx.elemDefs = nullptr;
+                return true;
+            }
+
+            fx.elemDefs = m_memory.Alloc<FxElemDef>(ordered.size());
+
+            auto success = true;
+            for (auto i = 0u; i < ordered.size(); i++)
+                success = CreateElem(*ordered[i], fx.elemDefs[i]) && success;
+
+            fx.flags = std::ranges::any_of(ordered,
+                                           [](const ElemSource* elem)
+                                           {
+                                               return elem->def.lightingFrac != 0;
+                                           })
+                           ? 1
+                           : 0;
+            fx.msecLoopingLife = LoopingLife(ordered, fx.elemDefCountLooping);
+            fx.totalSize = TotalSize(fx);
+
+            return success;
+        }
+
+        [[nodiscard]] static int LoopingLife(const std::vector<ElemSource*>& ordered, const int loopingCount)
+        {
+            auto life = 0.0;
+            for (auto i = 0; i < loopingCount; i++)
+            {
+                const auto& spawn = ordered[static_cast<size_t>(i)]->def.spawn.looping;
+
+                const auto intervals = static_cast<float>(std::max(spawn.count - 1, 0));
+                life = std::max(life, static_cast<double>(intervals) * spawn.intervalMsec);
+            }
+
+            return static_cast<int>(std::min(life, static_cast<double>(std::numeric_limits<int>::max())));
+        }
+
+        [[nodiscard]] static size_t StringSize(const char* value)
+        {
+            return value ? std::strlen(value) + 1u : 0u;
+        }
+
+        [[nodiscard]] static int TotalSize(const FxEffectDef& fx)
+        {
+            auto size = sizeof(FxEffectDef) + StringSize(fx.name);
+
+            const auto elemCount = fx.elemDefCountLooping + fx.elemDefCountOneShot + fx.elemDefCountEmission;
+            for (auto i = 0; i < elemCount; i++)
+            {
+                const auto& elem = fx.elemDefs[i];
+
+                size += sizeof(FxElemDef);
+
+                if (elem.velSamples)
+                    size += (static_cast<size_t>(static_cast<unsigned char>(elem.velIntervalCount)) + 1u) * sizeof(FxElemVelStateSample);
+                if (elem.visSamples)
+                    size += (static_cast<size_t>(static_cast<unsigned char>(elem.visStateIntervalCount)) + 1u) * sizeof(FxElemVisStateSample);
+
+                size += StringSize(elem.effectOnImpact.name) + StringSize(elem.effectOnDeath.name) + StringSize(elem.effectEmitted.name);
+
+                const auto elemType = static_cast<unsigned char>(elem.elemType);
+                const auto visualCount = static_cast<size_t>(static_cast<unsigned char>(elem.visualCount));
+
+                if (elemType == FX_ELEM_TYPE_DECAL)
+                {
+                    size += visualCount * sizeof(FxElemMarkVisuals);
+                }
+                else
+                {
+                    if (visualCount > 1u)
+                        size += visualCount * sizeof(FxElemVisuals);
+
+                    if (elemType == FX_ELEM_TYPE_SOUND || elemType == FX_ELEM_TYPE_RUNNER)
+                    {
+                        for (auto visual = 0u; visual < visualCount; visual++)
+                        {
+                            const auto& visuals = visualCount == 1u ? elem.visuals.instance : elem.visuals.array[visual];
+                            size += StringSize(elemType == FX_ELEM_TYPE_SOUND ? visuals.soundName : visuals.effectDef.name);
+                        }
+                    }
+                }
+
+                if (elemType == FX_ELEM_TYPE_TRAIL && elem.extended.trailDef)
+                {
+                    const auto* trail = elem.extended.trailDef;
+                    size += sizeof(FxTrailDef) + static_cast<size_t>(trail->vertCount) * sizeof(FxTrailVertex)
+                            + static_cast<size_t>(trail->indCount) * sizeof(uint16_t);
+                }
+            }
+
+            return static_cast<int>(size);
+        }
+
+        bool CreateElem(const ElemSource& elem, FxElemDef& def)
+        {
+            def = elem.def;
+
+            CreateVelSamples(elem, def);
+            CreateVisSamples(elem, def);
+            CreateTrail(elem, def);
+
+            def.effectOnImpact.name = EffectRef(elem.effectOnImpact);
+            def.effectOnDeath.name = EffectRef(elem.effectOnDeath);
+            def.effectEmitted.name = EffectRef(elem.effectEmitted);
+
+            return CreateVisuals(elem, def);
+        }
+
+        [[nodiscard]] static bool HasGraphs(const ElemSource& elem, const std::vector<const char*>& keys, size_t& sampleCount)
+        {
+            sampleCount = 0u;
+            auto anyGraph = false;
+
+            for (const auto* key : keys)
+            {
+                const auto found = elem.graphs.find(key);
+                if (found == elem.graphs.end())
+                    continue;
+
+                const auto& graph = found->second;
+                sampleCount = std::max({sampleCount, graph.base.size(), graph.amplitude.size()});
+                anyGraph = true;
+            }
+
+            return anyGraph;
+        }
+
+        [[nodiscard]] static float GraphValue(const ElemSource& elem, const char* key, const bool amplitude, const float time, const size_t component)
+        {
+            const auto found = elem.graphs.find(key);
+            if (found == elem.graphs.end())
+                return 0.0f;
+
+            const auto& graph = found->second;
+
+            return SampleCurve(amplitude ? graph.amplitude : graph.base, time, component) * graph.scale;
+        }
+
+        void CreateVelSamples(const ElemSource& elem, FxElemDef& def) const
+        {
+            static const std::vector<const char*> KEYS{
+                "velGraph0X",
+                "velGraph0Y",
+                "velGraph0Z",
+                "velGraph1X",
+                "velGraph1Y",
+                "velGraph1Z",
+            };
+
+            size_t sampleCount;
+            if (!HasGraphs(elem, KEYS, sampleCount) || sampleCount < 2u)
+            {
+                def.velSamples = nullptr;
+                def.velIntervalCount = 0;
+                return;
+            }
+
+            def.velIntervalCount = static_cast<char>(sampleCount - 1u);
+            def.velSamples = m_memory.Alloc<FxElemVelStateSample>(sampleCount);
+
+            for (auto i = 0u; i < sampleCount; i++)
+            {
+                const auto time = static_cast<float>(i) / static_cast<float>(sampleCount - 1u);
+                auto& sample = def.velSamples[i];
+
+                for (auto axis = 0u; axis < 3u; axis++)
+                {
+                    sample.local.velocity.base[axis] = GraphValue(elem, KEYS[axis], false, time, 0u);
+                    sample.local.velocity.amplitude[axis] = GraphValue(elem, KEYS[axis], true, time, 0u);
+                    sample.world.velocity.base[axis] = GraphValue(elem, KEYS[axis + 3u], false, time, 0u);
+                    sample.world.velocity.amplitude[axis] = GraphValue(elem, KEYS[axis + 3u], true, time, 0u);
+                }
+            }
+
+            for (auto i = 1u; i < sampleCount; i++)
+            {
+                const auto& previous = def.velSamples[i - 1u];
+                auto& sample = def.velSamples[i];
+
+                for (auto axis = 0u; axis < 3u; axis++)
+                {
+                    sample.local.totalDelta.base[axis] =
+                        previous.local.totalDelta.base[axis] + (previous.local.velocity.base[axis] + sample.local.velocity.base[axis]) / 2.0f;
+                    sample.local.totalDelta.amplitude[axis] =
+                        previous.local.totalDelta.amplitude[axis] + (previous.local.velocity.amplitude[axis] + sample.local.velocity.amplitude[axis]) / 2.0f;
+                    sample.world.totalDelta.base[axis] =
+                        previous.world.totalDelta.base[axis] + (previous.world.velocity.base[axis] + sample.world.velocity.base[axis]) / 2.0f;
+                    sample.world.totalDelta.amplitude[axis] =
+                        previous.world.totalDelta.amplitude[axis] + (previous.world.velocity.amplitude[axis] + sample.world.velocity.amplitude[axis]) / 2.0f;
+                }
+            }
+        }
+
+        void CreateVisSamples(const ElemSource& elem, FxElemDef& def) const
+        {
+            static const std::vector<const char*> KEYS{
+                "rotGraph",
+                "sizeGraph0",
+                "sizeGraph1",
+                "scaleGraph",
+                "colorGraph",
+                "alphaGraph",
+            };
+
+            size_t sampleCount;
+            if (!HasGraphs(elem, KEYS, sampleCount) || sampleCount < 2u)
+            {
+                def.visSamples = nullptr;
+                def.visStateIntervalCount = 0;
+                return;
+            }
+
+            def.visStateIntervalCount = static_cast<char>(sampleCount - 1u);
+            def.visSamples = m_memory.Alloc<FxElemVisStateSample>(sampleCount);
+
+            for (auto i = 0u; i < sampleCount; i++)
+            {
+                const auto time = static_cast<float>(i) / static_cast<float>(sampleCount - 1u);
+                auto& sample = def.visSamples[i];
+
+                for (auto amplitude = 0u; amplitude < 2u; amplitude++)
+                {
+                    auto& state = amplitude ? sample.amplitude : sample.base;
+
+                    state.rotationDelta = GraphValue(elem, "rotGraph", amplitude != 0u, time, 0u);
+                    state.size[0] = GraphValue(elem, "sizeGraph0", amplitude != 0u, time, 0u);
+                    state.size[1] = GraphValue(elem, "sizeGraph1", amplitude != 0u, time, 0u);
+                    state.scale = GraphValue(elem, "scaleGraph", amplitude != 0u, time, 0u);
+
+                    for (auto component = 0u; component < 3u; component++)
+                        state.color[component] = ColorByte(GraphValue(elem, "colorGraph", amplitude != 0u, time, component));
+                    state.color[3] = ColorByte(GraphValue(elem, "alphaGraph", amplitude != 0u, time, 0u));
+                }
+            }
+
+            for (auto i = 1u; i < sampleCount; i++)
+            {
+                const auto& previous = def.visSamples[i - 1u];
+                auto& sample = def.visSamples[i];
+
+                sample.base.rotationTotal = previous.base.rotationTotal + (previous.base.rotationDelta + sample.base.rotationDelta) / 2.0f;
+                sample.amplitude.rotationTotal = previous.amplitude.rotationTotal + (previous.amplitude.rotationDelta + sample.amplitude.rotationDelta) / 2.0f;
+            }
+        }
+
+        void CreateTrail(const ElemSource& elem, FxElemDef& def) const
+        {
+            if (!elem.isTrail)
+                return;
+
+            auto* trail = m_memory.Alloc<FxTrailDef>();
+
+            trail->scrollTimeMsec = static_cast<int>(std::lround(elem.trailScrollTime * 1000.0f));
+            trail->repeatDist = elem.trailRepeatDist;
+            trail->invSplitDist = elem.trailSplitDist != 0.0f ? 1.0f / elem.trailSplitDist : 0.0f;
+            trail->invSplitArcDist = elem.trailSplitArcDist != 0.0f ? 1.0f / elem.trailSplitArcDist : 0.0f;
+            trail->invSplitTime = elem.trailSplitTime != 0.0f ? 1.0f / elem.trailSplitTime : 0.0f;
+
+            trail->vertCount = static_cast<int>(elem.trailVerts.size());
+            if (!elem.trailVerts.empty())
+            {
+                trail->verts = m_memory.Alloc<FxTrailVertex>(elem.trailVerts.size());
+                std::ranges::copy(elem.trailVerts, trail->verts);
+            }
+
+            trail->indCount = static_cast<int>(elem.trailInds.size());
+            if (!elem.trailInds.empty())
+            {
+                trail->inds = m_memory.Alloc<uint16_t>(elem.trailInds.size());
+                std::ranges::copy(elem.trailInds, trail->inds);
+            }
+
+            def.extended.trailDef = trail;
+        }
+
+        [[nodiscard]] const char* EffectRef(const std::string& name)
+        {
+            if (name.empty())
+                return nullptr;
+
+            m_registration.AddIndirectAssetReference(m_context.LoadIndirectAssetReference<AssetFx>(name));
+
+            return m_memory.Dup(name.c_str());
+        }
+
+        bool CreateVisuals(const ElemSource& elem, FxElemDef& def)
+        {
+            const auto elemType = static_cast<unsigned char>(def.elemType);
+            const auto isDecal = elemType == FX_ELEM_TYPE_DECAL;
+            const auto namesPerVisual = isDecal ? std::extent_v<decltype(FxElemMarkVisuals::materials)> : 1u;
+
+            if (elem.visualNames.size() % namesPerVisual != 0u)
+            {
+                con::error("Fx element has {} visuals for a type that takes {} names each", elem.visualNames.size(), namesPerVisual);
+                return false;
+            }
+
+            const auto visualCount = elem.visualNames.size() / namesPerVisual;
+            def.visualCount = static_cast<char>(visualCount);
+
+            if (visualCount == 0u)
+            {
+                def.visuals.array = nullptr;
+                return true;
+            }
+
+            if (isDecal)
+            {
+                auto* marks = m_memory.Alloc<FxElemMarkVisuals>(visualCount);
+                def.visuals.markArray = marks;
+
+                auto success = true;
+                for (auto i = 0u; i < visualCount; i++)
+                {
+                    for (auto material = 0u; material < namesPerVisual; material++)
+                        success = LoadMaterial(elem.visualNames[i * namesPerVisual + material], marks[i].materials[material]) && success;
+                }
+
+                return success;
+            }
+
+            if (visualCount == 1u)
+                return LoadVisual(elemType, elem.visualNames[0], def.visuals.instance);
+
+            auto* visuals = m_memory.Alloc<FxElemVisuals>(visualCount);
+            def.visuals.array = visuals;
+
+            auto success = true;
+            for (auto i = 0u; i < visualCount; i++)
+                success = LoadVisual(elemType, elem.visualNames[i], visuals[i]) && success;
+
+            return success;
+        }
+
+        bool LoadVisual(const unsigned char elemType, const std::string& name, FxElemVisuals& visual)
+        {
+            switch (elemType)
+            {
+            case FX_ELEM_TYPE_MODEL:
+                return LoadModel(name, visual.model);
+
+            case FX_ELEM_TYPE_RUNNER:
+                visual.effectDef.name = EffectRef(name);
+                return true;
+
+            case FX_ELEM_TYPE_SOUND:
+                visual.soundName = !name.empty() ? m_memory.Dup(name.c_str()) : nullptr;
+                return true;
+
+            case FX_ELEM_TYPE_SPRITE_BILLBOARD:
+            case FX_ELEM_TYPE_SPRITE_ORIENTED:
+            case FX_ELEM_TYPE_TAIL:
+            case FX_ELEM_TYPE_TRAIL:
+            case FX_ELEM_TYPE_CLOUD:
+            case FX_ELEM_TYPE_SPARK_CLOUD:
+            case FX_ELEM_TYPE_SPARK_FOUNTAIN:
+                return LoadMaterial(name, visual.material);
+
+            default:
+                visual.anonymous = nullptr;
+                return true;
+            }
+        }
+
+        bool LoadMaterial(const std::string& name, Material*& material)
+        {
+            if (name.empty())
+            {
+                material = nullptr;
+                return true;
+            }
+
+            auto* asset = m_context.LoadDependency<AssetMaterial>(name);
+            if (!asset)
+            {
+                con::error("Could not find material \"{}\" of fx element", name);
+                return false;
+            }
+
+            m_registration.AddDependency(asset);
+            material = asset->Asset();
+
+            return true;
+        }
+
+        bool LoadModel(const std::string& name, XModel*& model)
+        {
+            if (name.empty())
+            {
+                model = nullptr;
+                return true;
+            }
+
+            auto* asset = m_context.LoadDependency<AssetXModel>(name);
+            if (!asset)
+            {
+                con::error("Could not find model \"{}\" of fx element", name);
+                return false;
+            }
+
+            m_registration.AddDependency(asset);
+            model = asset->Asset();
+
+            return true;
+        }
+
+        MemoryManager& m_memory;
+        AssetCreationContext& m_context;
+        AssetRegistration<AssetFx>& m_registration;
+    };
+
+    class FxLoader final : public AssetCreator<AssetFx>
+    {
+    public:
+        FxLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(fx::GetEfxFileNameForAssetName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* fx = m_memory.Alloc<FxEffectDef>();
+            fx->name = m_memory.Dup(assetName.c_str());
+
+            AssetRegistration<AssetFx> registration(assetName, fx);
+
+            EfxLoader loader(m_memory, context, registration);
+            if (!loader.Load(*file.m_stream, *fx))
+                return AssetCreationResult::Failure();
+
+            return AssetCreationResult::Success(context.AddAsset(std::move(registration)));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+} // namespace
+
+namespace fx
+{
+    std::unique_ptr<AssetCreator<AssetFx>> CreateEfxLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<FxLoader>(memory, searchPath);
+    }
+} // namespace fx

@@ -4,6 +4,7 @@
 
 #ifdef ARCH_x64
 #include "Asset/GlobalAssetPoolsLoader.h"
+#include "FX/LoaderEfxIW4MS.h"
 #include "Game/IW4MS/AssetMarkerIW4MS.h"
 #include "Game/IW4MS/Font/FontLoaderIW4MS.h"
 #include "Game/IW4MS/GameIW4MS.h"
@@ -47,9 +48,7 @@
 
 using namespace IW4MS;
 
-void ObjLoader::LoadReferencedContainersForZone([[maybe_unused]] ISearchPath& searchPath, [[maybe_unused]] Zone& zone) const
-{
-}
+void ObjLoader::LoadReferencedContainersForZone([[maybe_unused]] ISearchPath& searchPath, [[maybe_unused]] Zone& zone) const {}
 
 void ObjLoader::UnloadContainersOfZone([[maybe_unused]] Zone& zone) const {}
 
@@ -121,6 +120,7 @@ namespace
         collection.AddAssetCreator(material::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(sound_curve::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(sound::CreateLoadedSoundLoaderIW4MS(memory, searchPath));
+        collection.AddAssetCreator(fx::CreateEfxLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(map_ents::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(addon_map_ents::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(light_def::CreateLoaderIW4MS(memory, searchPath));

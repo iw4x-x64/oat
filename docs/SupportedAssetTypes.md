@@ -120,7 +120,7 @@ from this table.
 | menuDef_t                 | ✅               | ✅               | See menulist.                                                                  |
 | LocalizeEntry             | ✅               | ✅               |                                                                                |
 | WeaponCompleteDef         | ✅               | ✅               |                                                                                |
-| FxEffectDef               | ✅               | ❌               | Dumped as `.efx`.                                                              |
+| FxEffectDef               | ✅               | ✅               | `.efx`. Derived fields are recomputed on load, as the format does not hold them.|
 | FxImpactTable             | ✅               | ❌               | JSON. No source format exists for it.                                          |
 | RawFile                   | ✅               | ✅               |                                                                                |
 | StringTable               | ✅               | ✅               |                                                                                |
