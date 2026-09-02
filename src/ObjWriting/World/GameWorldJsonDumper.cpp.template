@@ -14,6 +14,7 @@
 #include WRITER_HEADER
 
 #include "Dumping/AssetDumpingContext.h"
+#include "World/WorldCommon.h"
 #include "World/WorldJsonCommon.h"
 #include "Zone/Zone.h"
 
@@ -269,7 +270,7 @@ namespace world
 {
     void SP_CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetGameWorldSp::Type>& asset)
     {
-        const auto assetFile = context.OpenAssetFile(std::format("gameworld_sp/{}.json", asset.m_name));
+        const auto assetFile = context.OpenAssetFile(GetGameWorldSpJsonFileName(asset.m_name));
         if (!assetFile)
             return;
 
@@ -278,7 +279,7 @@ namespace world
 
     void MP_CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetGameWorldMp::Type>& asset)
     {
-        const auto assetFile = context.OpenAssetFile(std::format("gameworld_mp/{}.json", asset.m_name));
+        const auto assetFile = context.OpenAssetFile(GetGameWorldMpJsonFileName(asset.m_name));
         if (!assetFile)
             return;
 

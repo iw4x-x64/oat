@@ -1,0 +1,441 @@
+#include "LoaderGameWorldIW4MS.h"
+
+#include "Utils/Logging/Log.h"
+#include "World/WorldCommon.h"
+#include "World/WorldJsonLoadCommon.h"
+
+#include <format>
+#include <iostream>
+#include <nlohmann/json.hpp>
+
+using namespace nlohmann;
+using namespace IW4MS;
+
+namespace
+{
+    void LoadGlassData(const json& jGlass, G_GlassData& glass, MemoryManager& memory)
+    {
+        jGlass.at("damageToWeaken").get_to(glass.damageToWeaken);
+        jGlass.at("damageToDestroy").get_to(glass.damageToDestroy);
+
+        const auto& jPieces = jGlass.at("glassPieces");
+        glass.pieceCount = static_cast<unsigned>(jPieces.size());
+        glass.glassPieces = world::Array<G_GlassPiece>(memory,
+                                                       jPieces,
+                                                       [](const json& jPiece, G_GlassPiece& piece)
+                                                       {
+                                                           jPiece.at("damageTaken").get_to(piece.damageTaken);
+                                                           jPiece.at("collapseTime").get_to(piece.collapseTime);
+                                                           jPiece.at("lastStateChangeTime").get_to(piece.lastStateChangeTime);
+                                                           piece.impactDir = static_cast<char>(jPiece.at("impactDir").get<int>());
+
+                                                           int impactPos[std::extent_v<decltype(piece.impactPos)>];
+                                                           world::ArrayOfSize(jPiece.at("impactPos"), impactPos, std::extent_v<decltype(impactPos)>);
+                                                           for (auto i = 0u; i < std::extent_v<decltype(impactPos)>; i++)
+                                                               piece.impactPos[i] = static_cast<char>(impactPos[i]);
+                                                       });
+
+        const auto& jNames = jGlass.at("glassNames");
+        glass.glassNameCount = static_cast<unsigned>(jNames.size());
+        glass.glassNames = world::Array<G_GlassName>(memory,
+                                                     jNames,
+                                                     [&memory](const json& jName, G_GlassName& name)
+                                                     {
+                                                         const auto& nameStr = jName.at("nameStr").get_ref<const std::string&>();
+                                                         name.nameStr = !nameStr.empty() ? memory.Dup(nameStr.c_str()) : nullptr;
+
+                                                         jName.at("name").get_to(name.name);
+
+                                                         const auto& jPieceIndices = jName.at("pieceIndices");
+                                                         name.pieceCount = static_cast<uint16_t>(jPieceIndices.size());
+                                                         name.pieceIndices = world::Array<uint16_t>(memory, jPieceIndices);
+                                                     });
+
+        world::ReadIfPresent(jGlass, "pad", reinterpret_cast<unsigned char (&)[std::extent_v<decltype(glass.pad)>]>(glass.pad));
+    }
+
+    [[nodiscard]] G_GlassData* LoadOptionalGlassData(const json& jRoot, MemoryManager& memory)
+    {
+        const auto jGlass = jRoot.find("g_glassData");
+        if (jGlass == jRoot.end())
+            return nullptr;
+
+        auto* glass = memory.Alloc<G_GlassData>();
+        LoadGlassData(*jGlass, *glass, memory);
+
+        return glass;
+    }
+
+    class SpJsonLoader
+    {
+    public:
+        SpJsonLoader(std::istream& stream, MemoryManager& memory, Zone& zone, AssetRegistration<AssetGameWorldSp>& registration)
+            : m_stream(stream),
+              m_memory(memory),
+              m_zone(zone),
+              m_registration(registration)
+        {
+        }
+
+        bool Load(GameWorldSp& gameWorld) const
+        {
+            try
+            {
+                const auto jRoot = json::parse(m_stream);
+                std::string type;
+                std::string game;
+                unsigned version;
+
+                jRoot.at("_type").get_to(type);
+                jRoot.at("_version").get_to(version);
+                jRoot.at("_game").get_to(game);
+
+                if (type != "gameworld_sp" || version != 1u || game != "iw4")
+                {
+                    con::error("Tried to load gameworld_sp \"{}\" but did not find expected type gameworld_sp of version 1 for game iw4", gameWorld.name);
+                    return false;
+                }
+
+                LoadPathData(jRoot.at("path"), gameWorld.path);
+                LoadVehicleTrack(jRoot.at("vehicleTrack"), gameWorld.vehicleTrack);
+                gameWorld.g_glassData = LoadOptionalGlassData(jRoot, m_memory);
+
+                return true;
+            }
+            catch (const json::exception& e)
+            {
+                con::error("Failed to parse json of gameworld_sp \"{}\": {}", gameWorld.name, e.what());
+            }
+            catch (const world::LoadException& e)
+            {
+                con::error("Failed to load gameworld_sp \"{}\": {}", gameWorld.name, e.what());
+            }
+
+            return false;
+        }
+
+    private:
+        [[nodiscard]] ScriptString ScriptStr(const json& jValue) const
+        {
+            const auto scriptString = m_zone.m_script_strings.AddOrGetScriptString(jValue.get_ref<const std::string&>());
+            m_registration.AddScriptString(scriptString);
+
+            return static_cast<ScriptString>(scriptString);
+        }
+
+        void LoadPathData(const json& jPath, PathData& path) const
+        {
+            const auto& jNodes = jPath.at("nodes");
+            path.nodeCount = static_cast<unsigned>(jNodes.size());
+            path.nodes = world::Array<pathnode_t>(m_memory,
+                                                  jNodes,
+                                                  [this](const json& jNode, pathnode_t& node)
+                                                  {
+                                                      LoadNode(jNode, node);
+                                                  });
+
+            jPath.at("chainNodeCount").get_to(path.chainNodeCount);
+            path.chainNodeForNode = world::Array<uint16_t>(m_memory, jPath.at("chainNodeForNode"));
+            path.nodeForChainNode = world::Array<uint16_t>(m_memory, jPath.at("nodeForChainNode"));
+
+            jPath.at("visBytes").get_to(path.visBytes);
+            path.pathVis = static_cast<char*>(world::Base64(m_memory, jPath.at("pathVis"), static_cast<size_t>(path.visBytes)));
+
+            const auto& jNodeTree = jPath.at("nodeTree");
+            path.nodeTreeCount = static_cast<int>(jNodeTree.size());
+            path.nodeTree = world::Array<pathnode_tree_t>(m_memory,
+                                                          jNodeTree,
+                                                          [this](const json& jTree, pathnode_tree_t& tree)
+                                                          {
+                                                              LoadNodeTree(jTree, tree);
+                                                          });
+
+            if (path.nodeCount > 0u)
+                path.basenodes = m_memory.Alloc<pathbasenode_t>(path.nodeCount);
+        }
+
+        void LoadNodeTree(const json& jTree, pathnode_tree_t& tree) const
+        {
+            jTree.at("axis").get_to(tree.axis);
+            jTree.at("dist").get_to(tree.dist);
+
+            if (tree.axis >= 0)
+            {
+                world::ArrayOfSize(jTree.at("children"),
+                                   tree.u.child,
+                                   std::extent_v<decltype(tree.u.child)>,
+                                   [this](const json& jChild, pathnode_tree_t*& child)
+                                   {
+                                       if (jChild.is_null())
+                                       {
+                                           child = nullptr;
+                                           return;
+                                       }
+
+                                       child = m_memory.Alloc<pathnode_tree_t>();
+                                       LoadNodeTree(jChild, *child);
+                                   });
+            }
+            else
+            {
+                const auto& jNodes = jTree.at("nodes");
+                tree.u.s.nodeCount = static_cast<int>(jNodes.size());
+                tree.u.s.nodes = world::Array<uint16_t>(m_memory, jNodes);
+            }
+        }
+
+        void LoadNode(const json& jNode, pathnode_t& node) const
+        {
+            const auto& jConstant = jNode.at("constant");
+            auto& c = node.constant;
+
+            c.type = static_cast<nodeType>(jConstant.at("type").get<int>());
+            jConstant.at("spawnflags").get_to(c.spawnflags);
+            c.targetname = ScriptStr(jConstant.at("targetname"));
+            c.script_linkName = ScriptStr(jConstant.at("script_linkName"));
+            c.script_noteworthy = ScriptStr(jConstant.at("script_noteworthy"));
+            c.target = ScriptStr(jConstant.at("target"));
+            c.animscript = ScriptStr(jConstant.at("animscript"));
+            jConstant.at("animscriptfunc").get_to(c.animscriptfunc);
+            world::Vec(jConstant.at("vOrigin"), c.vOrigin);
+            jConstant.at("fAngle").get_to(c.fAngle);
+            world::Vec(jConstant.at("forward"), c.forward);
+            jConstant.at("fRadius").get_to(c.fRadius);
+            jConstant.at("minUseDistSq").get_to(c.minUseDistSq);
+            world::ArrayOfSize(jConstant.at("wOverlapNode"), c.wOverlapNode, std::extent_v<decltype(c.wOverlapNode)>);
+
+            const auto& jLinks = jConstant.at("links");
+            c.totalLinkCount = static_cast<uint16_t>(jLinks.size());
+            c.Links = world::Array<pathlink_s>(m_memory,
+                                               jLinks,
+                                               [](const json& jLink, pathlink_s& link)
+                                               {
+                                                   jLink.at("fDist").get_to(link.fDist);
+                                                   jLink.at("nodeNum").get_to(link.nodeNum);
+                                                   link.disconnectCount = static_cast<char>(jLink.at("disconnectCount").get<int>());
+                                                   link.negotiationLink = static_cast<char>(jLink.at("negotiationLink").get<int>());
+                                                   link.flags = static_cast<char>(jLink.at("flags").get<int>());
+
+                                                   int badPlaceCount[std::extent_v<decltype(link.ubBadPlaceCount)>];
+                                                   world::ArrayOfSize(jLink.at("ubBadPlaceCount"), badPlaceCount, std::extent_v<decltype(badPlaceCount)>);
+                                                   for (auto i = 0u; i < std::extent_v<decltype(badPlaceCount)>; i++)
+                                                       link.ubBadPlaceCount[i] = static_cast<char>(badPlaceCount[i]);
+                                               });
+
+            const auto& jDynamic = jNode.at("dynamic");
+            auto& d = node.dynamic;
+
+            jDynamic.at("iFreeTime").get_to(d.iFreeTime);
+            world::ArrayOfSize(jDynamic.at("iValidTime"), d.iValidTime, std::extent_v<decltype(d.iValidTime)>);
+            world::ArrayOfSize(jDynamic.at("dangerousNodeTime"), d.dangerousNodeTime, std::extent_v<decltype(d.dangerousNodeTime)>);
+            jDynamic.at("inPlayerLOSTime").get_to(d.inPlayerLOSTime);
+            jDynamic.at("wLinkCount").get_to(d.wLinkCount);
+            jDynamic.at("wOverlapCount").get_to(d.wOverlapCount);
+            jDynamic.at("turretEntNumber").get_to(d.turretEntNumber);
+            d.userCount = static_cast<char>(jDynamic.at("userCount").get<int>());
+            jDynamic.at("hasBadPlaceLink").get_to(d.hasBadPlaceLink);
+        }
+
+        void LoadVehicleTrack(const json& jTrack, VehicleTrack& track) const
+        {
+            const auto& jSegments = jTrack.at("segments");
+            track.segmentCount = static_cast<unsigned>(jSegments.size());
+            track.segments = world::Array<VehicleTrackSegment>(m_memory,
+                                                               jSegments,
+                                                               [this](const json& jSegment, VehicleTrackSegment& segment)
+                                                               {
+                                                                   LoadSegment(jSegment, segment);
+                                                               });
+
+            for (auto i = 0u; i < track.segmentCount; i++)
+            {
+                auto& segment = track.segments[i];
+                const auto& jSegment = jSegments[i];
+
+                segment.nextBranchesCount = static_cast<unsigned>(jSegment.at("nextBranches").size());
+                segment.nextBranches = LoadBranches(jSegment.at("nextBranches"), track);
+                segment.prevBranchesCount = static_cast<unsigned>(jSegment.at("prevBranches").size());
+                segment.prevBranches = LoadBranches(jSegment.at("prevBranches"), track);
+            }
+        }
+
+        [[nodiscard]] VehicleTrackSegment** LoadBranches(const json& jBranches, const VehicleTrack& track) const
+        {
+            return world::Array<VehicleTrackSegment*>(m_memory,
+                                                      jBranches,
+                                                      [&track](const json& jBranch, VehicleTrackSegment*& branch)
+                                                      {
+                                                          const auto index = jBranch.get<int>();
+                                                          if (index < 0)
+                                                          {
+                                                              branch = nullptr;
+                                                              return;
+                                                          }
+
+                                                          if (static_cast<unsigned>(index) >= track.segmentCount)
+                                                              throw world::LoadException(std::format("Vehicle track branch {} is out of bounds", index));
+
+                                                          branch = &track.segments[index];
+                                                      });
+        }
+
+        void LoadSegment(const json& jSegment, VehicleTrackSegment& segment) const
+        {
+            const auto& targetName = jSegment.at("targetName").get_ref<const std::string&>();
+            segment.targetName = !targetName.empty() ? m_memory.Dup(targetName.c_str()) : nullptr;
+
+            const auto& jSectors = jSegment.at("sectors");
+            segment.sectorCount = static_cast<unsigned>(jSectors.size());
+            segment.sectors = world::Array<VehicleTrackSector>(m_memory,
+                                                               jSectors,
+                                                               [this](const json& jSector, VehicleTrackSector& sector)
+                                                               {
+                                                                   LoadSector(jSector, sector);
+                                                               });
+
+            world::Vec(jSegment.at("endEdgeDir"), segment.endEdgeDir);
+            jSegment.at("endEdgeDist").get_to(segment.endEdgeDist);
+            jSegment.at("totalLength").get_to(segment.totalLength);
+        }
+
+        void LoadSector(const json& jSector, VehicleTrackSector& sector) const
+        {
+            world::Vec(jSector.at("startEdgeDir"), sector.startEdgeDir);
+            jSector.at("startEdgeDist").get_to(sector.startEdgeDist);
+            world::Vec(jSector.at("leftEdgeDir"), sector.leftEdgeDir);
+            jSector.at("leftEdgeDist").get_to(sector.leftEdgeDist);
+            world::Vec(jSector.at("rightEdgeDir"), sector.rightEdgeDir);
+            jSector.at("rightEdgeDist").get_to(sector.rightEdgeDist);
+            jSector.at("sectorLength").get_to(sector.sectorLength);
+            jSector.at("sectorWidth").get_to(sector.sectorWidth);
+            jSector.at("totalPriorLength").get_to(sector.totalPriorLength);
+            jSector.at("totalFollowingLength").get_to(sector.totalFollowingLength);
+
+            const auto& jObstacles = jSector.at("obstacles");
+            sector.obstacleCount = static_cast<unsigned>(jObstacles.size());
+            sector.obstacles = world::Array<VehicleTrackObstacle>(m_memory,
+                                                                  jObstacles,
+                                                                  [](const json& jObstacle, VehicleTrackObstacle& obstacle)
+                                                                  {
+                                                                      world::Vec(jObstacle.at("origin"), obstacle.origin);
+                                                                      jObstacle.at("radius").get_to(obstacle.radius);
+                                                                  });
+        }
+
+        std::istream& m_stream;
+        MemoryManager& m_memory;
+        Zone& m_zone;
+        AssetRegistration<AssetGameWorldSp>& m_registration;
+    };
+
+    class GameWorldSpLoader final : public AssetCreator<AssetGameWorldSp>
+    {
+    public:
+        GameWorldSpLoader(MemoryManager& memory, ISearchPath& searchPath, Zone& zone)
+            : m_memory(memory),
+              m_search_path(searchPath),
+              m_zone(zone)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(world::GetGameWorldSpJsonFileName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* gameWorld = m_memory.Alloc<GameWorldSp>();
+            gameWorld->name = m_memory.Dup(assetName.c_str());
+
+            AssetRegistration<AssetGameWorldSp> registration(assetName, gameWorld);
+
+            const SpJsonLoader loader(*file.m_stream, m_memory, m_zone, registration);
+            if (!loader.Load(*gameWorld))
+                return AssetCreationResult::Failure();
+
+            return AssetCreationResult::Success(context.AddAsset(std::move(registration)));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+        Zone& m_zone;
+    };
+
+    class GameWorldMpLoader final : public AssetCreator<AssetGameWorldMp>
+    {
+    public:
+        GameWorldMpLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(world::GetGameWorldMpJsonFileName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* gameWorld = m_memory.Alloc<GameWorldMp>();
+            gameWorld->name = m_memory.Dup(assetName.c_str());
+
+            if (!Load(*gameWorld, *file.m_stream))
+                return AssetCreationResult::Failure();
+
+            return AssetCreationResult::Success(context.AddAsset<AssetGameWorldMp>(assetName, gameWorld));
+        }
+
+    private:
+        bool Load(GameWorldMp& gameWorld, std::istream& stream) const
+        {
+            try
+            {
+                const auto jRoot = json::parse(stream);
+                std::string type;
+                std::string game;
+                unsigned version;
+
+                jRoot.at("_type").get_to(type);
+                jRoot.at("_version").get_to(version);
+                jRoot.at("_game").get_to(game);
+
+                if (type != "gameworld_mp" || version != 1u || game != "iw4")
+                {
+                    con::error("Tried to load gameworld_mp \"{}\" but did not find expected type gameworld_mp of version 1 for game iw4", gameWorld.name);
+                    return false;
+                }
+
+                gameWorld.g_glassData = LoadOptionalGlassData(jRoot, m_memory);
+
+                return true;
+            }
+            catch (const json::exception& e)
+            {
+                con::error("Failed to parse json of gameworld_mp \"{}\": {}", gameWorld.name, e.what());
+            }
+            catch (const world::LoadException& e)
+            {
+                con::error("Failed to load gameworld_mp \"{}\": {}", gameWorld.name, e.what());
+            }
+
+            return false;
+        }
+
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+} // namespace
+
+namespace world
+{
+    std::unique_ptr<AssetCreator<AssetGameWorldSp>> CreateGameWorldSpLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath, Zone& zone)
+    {
+        return std::make_unique<GameWorldSpLoader>(memory, searchPath, zone);
+    }
+
+    std::unique_ptr<AssetCreator<AssetGameWorldMp>> CreateGameWorldMpLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<GameWorldMpLoader>(memory, searchPath);
+    }
+} // namespace world
