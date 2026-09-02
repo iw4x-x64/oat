@@ -13,6 +13,7 @@
 #include WRITER_HEADER
 
 #include "Dumping/AssetDumpingContext.h"
+#include "World/WorldCommon.h"
 #include "World/WorldJsonCommon.h"
 
 #include <iomanip>
@@ -127,7 +128,7 @@ namespace world
 {
     void CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetFxWorld::Type>& asset)
     {
-        const auto assetFile = context.OpenAssetFile(std::format("fxworld/{}.json", asset.m_name));
+        const auto assetFile = context.OpenAssetFile(GetFxWorldJsonFileName(asset.m_name));
         if (!assetFile)
             return;
 

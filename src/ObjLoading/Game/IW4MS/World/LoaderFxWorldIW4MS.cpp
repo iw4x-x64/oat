@@ -1,0 +1,249 @@
+#include "LoaderFxWorldIW4MS.h"
+
+#include "Utils/Logging/Log.h"
+#include "World/WorldCommon.h"
+#include "World/WorldJsonLoadCommon.h"
+
+#include <format>
+#include <iostream>
+#include <nlohmann/json.hpp>
+
+using namespace nlohmann;
+using namespace IW4MS;
+
+namespace
+{
+    class JsonLoader
+    {
+    public:
+        JsonLoader(std::istream& stream, MemoryManager& memory, AssetCreationContext& context, AssetRegistration<AssetFxWorld>& registration)
+            : m_stream(stream),
+              m_memory(memory),
+              m_context(context),
+              m_registration(registration)
+        {
+        }
+
+        bool Load(FxWorld& fxWorld) const
+        {
+            try
+            {
+                const auto jRoot = json::parse(m_stream);
+                std::string type;
+                std::string game;
+                unsigned version;
+
+                jRoot.at("_type").get_to(type);
+                jRoot.at("_version").get_to(version);
+                jRoot.at("_game").get_to(game);
+
+                if (type != "fxworld" || version != 1u || game != "iw4")
+                {
+                    con::error("Tried to load fxworld \"{}\" but did not find expected type fxworld of version 1 for game iw4", fxWorld.name);
+                    return false;
+                }
+
+                return LoadGlassSystem(jRoot, fxWorld.glassSys);
+            }
+            catch (const json::exception& e)
+            {
+                con::error("Failed to parse json of fxworld \"{}\": {}", fxWorld.name, e.what());
+            }
+            catch (const world::LoadException& e)
+            {
+                con::error("Failed to load fxworld \"{}\": {}", fxWorld.name, e.what());
+            }
+
+            return false;
+        }
+
+    private:
+        bool LoadGlassSystem(const json& jRoot, FxGlassSystem& glass) const
+        {
+            const auto& jGlass = jRoot.at("glassSys");
+
+            jGlass.at("time").get_to(glass.time);
+            jGlass.at("prevTime").get_to(glass.prevTime);
+            jGlass.at("pieceLimit").get_to(glass.pieceLimit);
+            jGlass.at("pieceWordCount").get_to(glass.pieceWordCount);
+            jGlass.at("cellCount").get_to(glass.cellCount);
+            jGlass.at("activePieceCount").get_to(glass.activePieceCount);
+            jGlass.at("firstFreePiece").get_to(glass.firstFreePiece);
+            jGlass.at("geoDataLimit").get_to(glass.geoDataLimit);
+            jGlass.at("geoDataCount").get_to(glass.geoDataCount);
+            glass.needToCompactData = jGlass.at("needToCompactData").get<bool>();
+            glass.initCount = static_cast<char>(jGlass.at("initCount").get<int>());
+            jGlass.at("effectChanceAccum").get_to(glass.effectChanceAccum);
+            jGlass.at("lastPieceDeletionTime").get_to(glass.lastPieceDeletionTime);
+
+            const auto& jDefs = jRoot.at("defs");
+            glass.defCount = static_cast<unsigned>(jDefs.size());
+
+            auto success = true;
+            glass.defs = world::Array<FxGlassDef>(m_memory,
+                                                  jDefs,
+                                                  [this, &success](const json& jDef, FxGlassDef& def)
+                                                  {
+                                                      success = LoadDef(jDef, def) && success;
+                                                  });
+            if (!success)
+                return false;
+
+            const auto& jInitPieceStates = jRoot.at("initPieceStates");
+            glass.initPieceCount = static_cast<unsigned>(jInitPieceStates.size());
+            glass.initPieceStates = world::Array<FxGlassInitPieceState>(m_memory,
+                                                                        jInitPieceStates,
+                                                                        [](const json& jPiece, FxGlassInitPieceState& piece)
+                                                                        {
+                                                                            LoadInitPiece(jPiece, piece);
+                                                                        });
+
+            const auto& jLightingHandles = jRoot.at("lightingHandles");
+            if (jLightingHandles.size() != glass.initPieceCount)
+            {
+                con::error("Fxworld has {} lighting handles but {} init pieces", jLightingHandles.size(), glass.initPieceCount);
+                return false;
+            }
+            glass.lightingHandles = world::Array<uint16_t>(m_memory, jLightingHandles);
+
+            const auto& jInitGeoData = jRoot.at("initGeoData");
+            glass.initGeoDataCount = static_cast<unsigned>(jInitGeoData.size());
+            glass.initGeoData = world::Array<FxGlassGeometryData>(m_memory,
+                                                                  jInitGeoData,
+                                                                  [](const json& jData, FxGlassGeometryData& data)
+                                                                  {
+                                                                      world::ArrayOfSize(jData, data.anonymous, std::extent_v<decltype(data.anonymous)>);
+                                                                  });
+
+            AllocRuntimeData(glass);
+
+            return true;
+        }
+
+        void AllocRuntimeData(FxGlassSystem& glass) const
+        {
+            const auto visDataCount = (glass.pieceLimit + 15u) / 16u * 16u;
+            const auto halfThicknessCount = (glass.pieceLimit + 3u) / 4u * 4u;
+            const auto cellBitsCount = glass.pieceWordCount * glass.cellCount;
+
+            if (glass.pieceLimit > 0u)
+            {
+                glass.piecePlaces = m_memory.Alloc<FxGlassPiecePlace>(glass.pieceLimit);
+                glass.pieceStates = m_memory.Alloc<FxGlassPieceState>(glass.pieceLimit);
+                glass.pieceDynamics = m_memory.Alloc<FxGlassPieceDynamics>(glass.pieceLimit);
+                glass.linkOrg = m_memory.Alloc<vec3_t>(glass.pieceLimit);
+                glass.visData = m_memory.Alloc<raw_byte16>(visDataCount);
+                glass.halfThickness = m_memory.Alloc<raw_float16>(halfThicknessCount);
+            }
+
+            if (glass.geoDataLimit > 0u)
+                glass.geoData = m_memory.Alloc<FxGlassGeometryData>(glass.geoDataLimit);
+
+            if (glass.pieceWordCount > 0u)
+                glass.isInUse = m_memory.Alloc<raw_uint>(glass.pieceWordCount);
+
+            if (cellBitsCount > 0u)
+                glass.cellBits = m_memory.Alloc<raw_uint>(cellBitsCount);
+        }
+
+        bool LoadDef(const json& jDef, FxGlassDef& def) const
+        {
+            jDef.at("halfThickness").get_to(def.halfThickness);
+            world::ArrayOfSize(jDef.at("texVecs"),
+                               def.texVecs,
+                               std::extent_v<decltype(def.texVecs)>,
+                               [](const json& jTexVec, float (&texVec)[2])
+                               {
+                                   world::Vec(jTexVec, texVec);
+                               });
+            world::ArrayOfSize(jDef.at("color"), def.color.array, std::extent_v<decltype(def.color.array)>);
+
+            return LoadReference<AssetMaterial>(jDef, "material", def.material)
+                   && LoadReference<AssetMaterial>(jDef, "materialShattered", def.materialShattered)
+                   && LoadReference<AssetPhysPreset>(jDef, "physPreset", def.physPreset);
+        }
+
+        template<typename AssetType> bool LoadReference(const json& jParent, const char* key, typename AssetType::Type*& reference) const
+        {
+            const auto& name = jParent.at(key).get_ref<const std::string&>();
+            if (name.empty())
+            {
+                reference = nullptr;
+                return true;
+            }
+
+            auto* asset = m_context.LoadDependency<AssetType>(name);
+            if (!asset)
+            {
+                con::error("Could not find {} \"{}\" of fxworld glass def", key, name);
+                return false;
+            }
+
+            m_registration.AddDependency(asset);
+            reference = asset->Asset();
+
+            return true;
+        }
+
+        static void LoadInitPiece(const json& jPiece, FxGlassInitPieceState& piece)
+        {
+            const auto& jFrame = jPiece.at("frame");
+            world::Vec(jFrame.at("quat"), piece.frame.quat);
+            world::Vec(jFrame.at("origin"), piece.frame.origin);
+
+            jPiece.at("radius").get_to(piece.radius);
+            world::Vec(jPiece.at("texCoordOrigin"), piece.texCoordOrigin);
+            jPiece.at("supportMask").get_to(piece.supportMask);
+            jPiece.at("areaX2").get_to(piece.areaX2);
+            piece.defIndex = static_cast<char>(jPiece.at("defIndex").get<int>());
+            piece.vertCount = static_cast<char>(jPiece.at("vertCount").get<int>());
+            piece.fanDataCount = static_cast<char>(jPiece.at("fanDataCount").get<int>());
+            piece.pad[0] = static_cast<char>(jPiece.value("pad", 0));
+        }
+
+        std::istream& m_stream;
+        MemoryManager& m_memory;
+        AssetCreationContext& m_context;
+        AssetRegistration<AssetFxWorld>& m_registration;
+    };
+
+    class FxWorldLoader final : public AssetCreator<AssetFxWorld>
+    {
+    public:
+        FxWorldLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
+        {
+        }
+
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto file = m_search_path.Open(world::GetFxWorldJsonFileName(assetName));
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            auto* fxWorld = m_memory.Alloc<FxWorld>();
+            fxWorld->name = m_memory.Dup(assetName.c_str());
+
+            AssetRegistration<AssetFxWorld> registration(assetName, fxWorld);
+
+            const JsonLoader loader(*file.m_stream, m_memory, context, registration);
+            if (!loader.Load(*fxWorld))
+                return AssetCreationResult::Failure();
+
+            return AssetCreationResult::Success(context.AddAsset(std::move(registration)));
+        }
+
+    private:
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+} // namespace
+
+namespace world
+{
+    std::unique_ptr<AssetCreator<AssetFxWorld>> CreateFxWorldLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<FxWorldLoader>(memory, searchPath);
+    }
+} // namespace world
