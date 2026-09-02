@@ -16,6 +16,7 @@
 #include CONSTANTS_HEADER
 #include "Dumping/AssetDumpingContext.h"
 #include "Dumping/ReferencedAssetName.h"
+#include "FX/FxCommon.h"
 
 #include <iomanip>
 #include <nlohmann/json.hpp>
@@ -26,8 +27,6 @@ using namespace GAME;
 
 namespace
 {
-    constexpr std::string_view DEFAULT_ASSET_NAME = "default";
-
     [[nodiscard]] std::string ImpactTypeKey(const unsigned index)
     {
         switch (index)
@@ -127,9 +126,7 @@ namespace fx
 {
     void CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetImpactFx::Type>& asset)
     {
-        const auto name = asset.m_name.empty() ? DEFAULT_ASSET_NAME : std::string_view(asset.m_name);
-
-        const auto assetFile = context.OpenAssetFile(std::format("impactfx/{}.json", name));
+        const auto assetFile = context.OpenAssetFile(fx::GetImpactFxJsonFileNameForAssetName(asset.m_name));
         if (!assetFile)
             return;
 

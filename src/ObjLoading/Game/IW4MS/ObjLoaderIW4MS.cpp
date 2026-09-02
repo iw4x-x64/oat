@@ -5,6 +5,7 @@
 #ifdef ARCH_x64
 #include "Asset/GlobalAssetPoolsLoader.h"
 #include "FX/LoaderEfxIW4MS.h"
+#include "FX/LoaderImpactFxIW4MS.h"
 #include "Game/IW4MS/AssetMarkerIW4MS.h"
 #include "Game/IW4MS/Font/FontLoaderIW4MS.h"
 #include "Game/IW4MS/GameIW4MS.h"
@@ -121,6 +122,7 @@ namespace
         collection.AddAssetCreator(sound_curve::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(sound::CreateLoadedSoundLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(fx::CreateEfxLoaderIW4MS(memory, searchPath));
+        collection.AddAssetCreator(fx::CreateImpactFxLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(map_ents::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(addon_map_ents::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(light_def::CreateLoaderIW4MS(memory, searchPath));
