@@ -104,8 +104,8 @@ const CommandLineOption* const OPTION_CONVERT_TO =
     CommandLineOption::Builder::Create()
     .WithLongName("convert-to")
     .WithDescription("Writes the loaded zone back out as the specified game instead of dumping its assets. "
-                     "Only IW4 to IW4MS is supported: they are the same game built for two word sizes, so the "
-                     "assets need no conversion. The result goes to the output folder as <zone>.ff.")
+                     "Only IW4 and IW4MS can be converted to each other: they are the same game built for two "
+                     "word sizes, so the assets need no conversion. The result goes to the output folder as <zone>.ff.")
     .WithParameter("gameName")
     .Build();
 

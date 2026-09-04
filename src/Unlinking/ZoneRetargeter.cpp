@@ -40,6 +40,22 @@ namespace
         return target;
     }
 
+    template<typename Target_t, typename Source_t>
+    Target_t* RetargetNarrowedArray(const Source_t* source, const size_t count, ZoneMemory& memory)
+    {
+        static_assert(sizeof(Target_t) < sizeof(Source_t));
+
+        if (!source || count == 0u)
+            return nullptr;
+
+        auto* target = memory.Alloc<Target_t>(count);
+
+        for (auto i = 0u; i < count; i++)
+            std::memcpy(&target[i], &source[i], sizeof(Target_t));
+
+        return target;
+    }
+
     IW4MS::clipMap_t* RetargetClipMapToIw4ms(const IW4::clipMap_t& source, ZoneMemory& memory, unsigned& dynEntClients)
     {
         static_assert(sizeof(IW4::clipMap_t) < sizeof(IW4MS::clipMap_t));
@@ -422,6 +438,326 @@ namespace
 
         return target;
     }
+
+    IW4::clipMap_t* RetargetClipMapToIw4(const IW4MS::clipMap_t& source, ZoneMemory& memory, unsigned& dynEntClients)
+    {
+        static_assert(sizeof(IW4::clipMap_t) < sizeof(IW4MS::clipMap_t));
+        static_assert(offsetof(IW4::clipMap_t, checksum) == offsetof(IW4MS::clipMap_t, checksum));
+        static_assert(offsetof(IW4::clipMap_t, dynEntClientList) == offsetof(IW4MS::clipMap_t, dynEntClientList));
+
+        static_assert(offsetof(IW4::clipMap_t, padding) == offsetof(IW4MS::clipMap_t, padding));
+
+        auto* target = memory.Alloc<IW4::clipMap_t>();
+        std::memcpy(target, &source, offsetof(IW4::clipMap_t, padding));
+        std::memset(target->padding, 0, sizeof(target->padding));
+
+        for (auto i = 0u; i < std::extent_v<decltype(source.dynEntClientList)>; i++)
+        {
+            const auto count = static_cast<size_t>(source.dynEntCount[i]);
+
+            target->dynEntClientList[i] = RetargetNarrowedArray<IW4::DynEntityClient>(source.dynEntClientList[i], count, memory);
+
+            if (target->dynEntClientList[i])
+                dynEntClients += static_cast<unsigned>(count);
+        }
+
+        return target;
+    }
+
+    unsigned RetargetFxWorldToIw4(IW4MS::FxWorld& world, ZoneMemory& memory)
+    {
+        static_assert(sizeof(IW4::FxGlassSystem) == sizeof(IW4MS::FxGlassSystem));
+        static_assert(offsetof(IW4::FxGlassSystem, pieceDynamics) == offsetof(IW4MS::FxGlassSystem, pieceDynamics));
+
+        auto& glass = world.glassSys;
+        auto* retargeted = RetargetNarrowedArray<IW4::FxGlassPieceDynamics>(glass.pieceDynamics, glass.pieceLimit, memory);
+
+        if (!retargeted)
+            return 0u;
+
+        glass.pieceDynamics = reinterpret_cast<IW4MS::FxGlassPieceDynamics*>(retargeted);
+        return glass.pieceLimit;
+    }
+
+    IW4::SpeakerMap* RetargetSpeakerMapToIw4(const IW4MS::SpeakerMap& source, ZoneMemory& memory)
+    {
+        auto* target = memory.Alloc<IW4::SpeakerMap>();
+        target->isDefault = source.isDefault;
+        target->name = source.name;
+        std::memset(target->channelMaps, 0, sizeof(target->channelMaps));
+
+        constexpr auto speakerLimit = static_cast<int>(std::extent_v<decltype(IW4::MSSChannelMap::speakers)>);
+        constexpr auto channelLimit = static_cast<int>(std::extent_v<decltype(IW4::MSSSpeakerLevels::levels)>);
+
+        for (auto channelCount = 0u; channelCount < 2u; channelCount++)
+        {
+            for (auto speakerConfig = 0u; speakerConfig < 2u; speakerConfig++)
+            {
+                const auto& sourceLevels = source.channelMaps[channelCount].speakers[speakerConfig];
+                auto& targetMap = target->channelMaps[channelCount][speakerConfig];
+
+                if (!sourceLevels.levels)
+                    continue;
+
+                auto highestSpeaker = -1;
+
+                for (auto i = 0u; i < sourceLevels.levelCount; i++)
+                {
+                    const auto& cell = sourceLevels.levels[i];
+                    const auto speaker = static_cast<int>(cell.speaker);
+                    const auto channel = static_cast<int>(cell.channel);
+
+                    if (speaker >= speakerLimit || channel >= channelLimit)
+                    {
+                        con::error("Cannot retarget this zone: the speaker map \"{}\" places a level on speaker {} of "
+                                   "source channel {}, and the x86 mix matrix only holds {} speakers of {} channels.",
+                                   source.name ? source.name : "",
+                                   speaker,
+                                   channel,
+                                   speakerLimit,
+                                   channelLimit);
+                        return nullptr;
+                    }
+
+                    auto& targetSpeaker = targetMap.speakers[speaker];
+                    targetSpeaker.levels[channel] = cell.gain;
+
+                    if (channel + 1 > targetSpeaker.numLevels)
+                        targetSpeaker.numLevels = channel + 1;
+
+                    highestSpeaker = std::max(highestSpeaker, speaker);
+                }
+
+                targetMap.speakerCount = highestSpeaker + 1;
+                for (auto i = 0; i < targetMap.speakerCount; i++)
+                    targetMap.speakers[i].speaker = i;
+            }
+        }
+
+        return target;
+    }
+
+    IW4::water_t* RetargetWaterToIw4(const IW4MS::water_t& source, ZoneMemory& memory)
+    {
+        auto* target = memory.Alloc<IW4::water_t>();
+
+        target->writable.floatTime = source.writable.floatTime;
+        target->M = source.M;
+        target->N = source.N;
+        target->Lx = source.Lx;
+        target->Lz = source.Lz;
+        target->gravity = source.gravity;
+        target->windvel = source.windvel;
+        target->amplitude = source.amplitude;
+        std::memcpy(target->winddir, source.winddir, sizeof(target->winddir));
+        std::memcpy(target->codeConstant, source.codeConstant, sizeof(target->codeConstant));
+        target->image = reinterpret_cast<IW4::GfxImage*>(source.image);
+
+        const auto cellCount = source.M > 0 && source.N > 0 ? static_cast<size_t>(source.M) * static_cast<size_t>(source.N) : 0u;
+
+        target->wTerm = source.wTerm;
+        target->H0 = nullptr;
+
+        if ((source.H0Part0 || source.H0Part1) && cellCount > 0u)
+        {
+            target->H0 = memory.Alloc<IW4::complex_s>(cellCount);
+
+            for (auto i = 0u; i < cellCount; i++)
+            {
+                target->H0[i].real = source.H0Part0 ? source.H0Part0[i] : 0.0f;
+                target->H0[i].imag = source.H0Part1 ? source.H0Part1[i] : 0.0f;
+            }
+        }
+
+        return target;
+    }
+
+    void RetargetLoadedSoundToIw4(IW4MS::LoadedSound& source)
+    {
+        static_assert(sizeof(IW4::MssSound) == sizeof(IW4MS::MssSound));
+        static_assert(offsetof(IW4::MssSound, data) == offsetof(IW4MS::MssSound, data));
+
+        const IW4MS::MssSound src = source.sound;
+        auto& dst = reinterpret_cast<IW4::MssSound&>(source.sound);
+
+        dst.info.format = static_cast<int>(src.wFormatTag);
+        dst.info.data_len = src.data_len;
+        dst.info.rate = src.nSamplesPerSec;
+        dst.info.bits = static_cast<int>(src.wBitsPerSample);
+        dst.info.channels = static_cast<int>(src.nChannels);
+        dst.info.samples = src.nBlockAlign > 0u ? src.data_len / src.nBlockAlign : 0u;
+        dst.info.block_size = src.nBlockAlign;
+
+        dst.info.data_ptr = nullptr;
+        dst.info.initial_ptr = nullptr;
+
+        dst.data = src.data;
+    }
+
+    bool RetargetGfxWorldToIw4(IW4MS::GfxWorld& world, unsigned& rescaledOffsets)
+    {
+        static_assert(sizeof(IW4MS::GfxAabbTree) == IW4MS_GFX_AABB_TREE_SIZE);
+
+        if (!world.aabbTrees || !world.aabbTreeCounts)
+            return true;
+
+        for (auto cell = 0; cell < world.dpvsPlanes.cellCount; cell++)
+        {
+            auto* trees = world.aabbTrees[cell].aabbTree;
+            if (!trees)
+                continue;
+
+            for (auto i = 0; i < world.aabbTreeCounts[cell]; i++)
+            {
+                auto& offset = trees[i].childrenOffset;
+
+                if (offset % IW4MS_GFX_AABB_TREE_SIZE != 0)
+                {
+                    if (trees[i].childCount == 0)
+                        continue;
+
+                    con::error("Cannot retarget this zone: aabb tree {} of cell {} has {} children at a childrenOffset "
+                               "of {}, which is not a whole number of {} byte records and so cannot be restated in the "
+                               "x86 stride.",
+                               i,
+                               cell,
+                               trees[i].childCount,
+                               offset,
+                               IW4MS_GFX_AABB_TREE_SIZE);
+                    return false;
+                }
+
+                offset = offset / IW4MS_GFX_AABB_TREE_SIZE * IW4_GFX_AABB_TREE_SIZE;
+                rescaledOffsets++;
+            }
+        }
+
+        return true;
+    }
+
+    std::unique_ptr<Zone> RetargetIw4msToIw4(const Zone& source)
+    {
+        static_assert(static_cast<int>(IW4::ASSET_TYPE_COUNT) == static_cast<int>(IW4MS::ASSET_TYPE_COUNT));
+        static_assert(static_cast<int>(IW4::ASSET_TYPE_CLIPMAP_MP) == static_cast<int>(IW4MS::ASSET_TYPE_CLIPMAP_MP));
+        static_assert(static_cast<int>(IW4::ASSET_TYPE_ADDON_MAP_ENTS) == static_cast<int>(IW4MS::ASSET_TYPE_ADDON_MAP_ENTS));
+
+        auto target = std::make_unique<Zone>(source.m_name, source.m_priority, GameId::IW4, source.m_platform);
+        target->m_language = source.m_language;
+
+        target->m_script_strings.InitializeForExistingZone();
+        for (auto i = 0u; i < source.m_script_strings.Count(); i++)
+            target->m_script_strings.AddScriptString(source.m_script_strings.CValue(i));
+
+        auto waters = 0u;
+        auto speakerMaps = 0u;
+        auto loadedSounds = 0u;
+        auto rescaledOffsets = 0u;
+        auto dynEntClients = 0u;
+        auto glassPieces = 0u;
+        std::unordered_map<const IW4MS::SpeakerMap*, IW4::SpeakerMap*> retargetedSpeakerMaps;
+        std::unordered_map<const IW4MS::water_t*, IW4::water_t*> retargetedWaters;
+
+        for (const auto* asset : source.m_pools)
+        {
+            if (asset->m_type == IW4MS::ASSET_TYPE_MATERIAL)
+            {
+                auto* material = static_cast<IW4MS::Material*>(asset->m_ptr);
+                if (!material->textureTable)
+                    continue;
+
+                for (auto i = 0u; i < material->textureCount; i++)
+                {
+                    auto& textureDef = material->textureTable[i];
+                    if (textureDef.semantic != IW4MS::TS_WATER_MAP || !textureDef.u.water)
+                        continue;
+
+                    const auto existing = retargetedWaters.find(textureDef.u.water);
+                    if (existing != retargetedWaters.end())
+                    {
+                        textureDef.u.water = reinterpret_cast<IW4MS::water_t*>(existing->second);
+                        continue;
+                    }
+
+                    auto* retargeted = RetargetWaterToIw4(*textureDef.u.water, target->Memory());
+                    retargetedWaters.emplace(textureDef.u.water, retargeted);
+                    textureDef.u.water = reinterpret_cast<IW4MS::water_t*>(retargeted);
+                    waters++;
+                }
+            }
+            else if (asset->m_type == IW4MS::ASSET_TYPE_SOUND)
+            {
+                auto* soundList = static_cast<IW4MS::snd_alias_list_t*>(asset->m_ptr);
+                for (auto i = 0; soundList->head && i < soundList->count; i++)
+                {
+                    auto& alias = soundList->head[i];
+                    if (!alias.speakerMap)
+                        continue;
+
+                    const auto existing = retargetedSpeakerMaps.find(alias.speakerMap);
+                    if (existing != retargetedSpeakerMaps.end())
+                    {
+                        alias.speakerMap = reinterpret_cast<IW4MS::SpeakerMap*>(existing->second);
+                        continue;
+                    }
+
+                    auto* retargeted = RetargetSpeakerMapToIw4(*alias.speakerMap, target->Memory());
+                    if (!retargeted)
+                        return nullptr;
+
+                    retargetedSpeakerMaps.emplace(alias.speakerMap, retargeted);
+                    alias.speakerMap = reinterpret_cast<IW4MS::SpeakerMap*>(retargeted);
+                    speakerMaps++;
+                }
+            }
+            else if (asset->m_type == IW4MS::ASSET_TYPE_LOADED_SOUND)
+            {
+                if (!asset->m_ptr)
+                    continue;
+
+                RetargetLoadedSoundToIw4(*static_cast<IW4MS::LoadedSound*>(asset->m_ptr));
+                loadedSounds++;
+            }
+            else if (asset->m_type == IW4MS::ASSET_TYPE_FXWORLD)
+            {
+                if (asset->m_ptr)
+                    glassPieces += RetargetFxWorldToIw4(*static_cast<IW4MS::FxWorld*>(asset->m_ptr), target->Memory());
+            }
+            else if (asset->m_type == IW4MS::ASSET_TYPE_GFXWORLD)
+            {
+                if (!RetargetGfxWorldToIw4(*static_cast<IW4MS::GfxWorld*>(asset->m_ptr), rescaledOffsets))
+                    return nullptr;
+            }
+        }
+
+        auto retargetedClipMaps = 0u;
+        for (const auto* asset : source.m_pools)
+        {
+            auto* pointer = asset->m_ptr;
+
+            if (asset->m_type == IW4MS::ASSET_TYPE_CLIPMAP_SP || asset->m_type == IW4MS::ASSET_TYPE_CLIPMAP_MP)
+            {
+                pointer = RetargetClipMapToIw4(*static_cast<const IW4MS::clipMap_t*>(pointer), target->Memory(), dynEntClients);
+                retargetedClipMaps++;
+            }
+
+            target->m_pools.AddAsset(asset->m_type, asset->m_name, pointer, {}, asset->m_used_script_strings, {});
+        }
+
+        con::info("Retargeted {} assets from IW4MS to IW4: {} clipmaps rebuilt for the narrower struct, {} dynamic "
+                  "entity clients and {} glass pieces rebuilt at the x86 stride, {} speaker maps scattered back into "
+                  "the x86 mix matrix, {} loaded sound headers restated as an AILSOUNDINFO, {} aabb tree child offsets "
+                  "restated in the x86 stride, {} waters interleaved back into one spectrum array",
+                  source.m_pools.GetTotalAssetCount(),
+                  retargetedClipMaps,
+                  dynEntClients,
+                  glassPieces,
+                  speakerMaps,
+                  loadedSounds,
+                  rescaledOffsets,
+                  waters);
+
+        return target;
+    }
 #endif
 } // namespace
 
@@ -433,8 +769,11 @@ namespace retarget
         if (source.m_game_id == GameId::IW4 && targetGame == GameId::IW4MS)
             return RetargetIw4ToIw4ms(source);
 
-        con::error("Cannot retarget {} to {}: only IW4 to IW4MS is supported, since they are the one pair that is the "
-                   "same game built for two word sizes.",
+        if (source.m_game_id == GameId::IW4MS && targetGame == GameId::IW4)
+            return RetargetIw4msToIw4(source);
+
+        con::error("Cannot retarget {} to {}: only IW4 and IW4MS can be retargeted to each other, since they are the "
+                   "one pair that is the same game built for two word sizes.",
                    GameId_Names[static_cast<unsigned>(source.m_game_id)],
                    GameId_Names[static_cast<unsigned>(targetGame)]);
 #else
