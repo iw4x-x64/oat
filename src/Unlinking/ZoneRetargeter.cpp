@@ -40,7 +40,7 @@ namespace
         return target;
     }
 
-    IW4MS::clipMap_t* RetargetClipMap(const IW4::clipMap_t& source, ZoneMemory& memory, unsigned& dynEntClients)
+    IW4MS::clipMap_t* RetargetClipMapToIw4ms(const IW4::clipMap_t& source, ZoneMemory& memory, unsigned& dynEntClients)
     {
         static_assert(sizeof(IW4::clipMap_t) < sizeof(IW4MS::clipMap_t));
         static_assert(offsetof(IW4::clipMap_t, checksum) == offsetof(IW4MS::clipMap_t, checksum));
@@ -70,7 +70,7 @@ namespace
     // IW4MS::FxGlassPieceDynamics. FxGlassSystem is the same shape in both builds, so the array
     // is swapped in place the way a speaker map is.
     //
-    unsigned RetargetFxWorld(IW4::FxWorld& world, ZoneMemory& memory)
+    unsigned RetargetFxWorldToIw4ms(IW4::FxWorld& world, ZoneMemory& memory)
     {
         static_assert(sizeof(IW4::FxGlassSystem) == sizeof(IW4MS::FxGlassSystem));
         static_assert(offsetof(IW4::FxGlassSystem, pieceDynamics) == offsetof(IW4MS::FxGlassSystem, pieceDynamics));
@@ -85,7 +85,7 @@ namespace
         return glass.pieceLimit;
     }
 
-    IW4MS::SpeakerMap* RetargetSpeakerMap(const IW4::SpeakerMap& source, ZoneMemory& memory)
+    IW4MS::SpeakerMap* RetargetSpeakerMapToIw4ms(const IW4::SpeakerMap& source, ZoneMemory& memory)
     {
         auto* target = memory.Alloc<IW4MS::SpeakerMap>();
         target->isDefault = source.isDefault;
@@ -167,7 +167,7 @@ namespace
     // takes the place of H0[i].real and the array at +16 takes the place of
     // H0[i].imag, so H0Part0 is the real half and H0Part1 the imaginary one.
     //
-    IW4MS::water_t* RetargetWater(const IW4::water_t& source, ZoneMemory& memory)
+    IW4MS::water_t* RetargetWaterToIw4ms(const IW4::water_t& source, ZoneMemory& memory)
     {
         auto* target = memory.Alloc<IW4MS::water_t>();
 
@@ -219,7 +219,7 @@ namespace
     //
     // Left unhandled, the writer emits a WAVEFORMATEX of zero channels at zero hertz. The voice
     // is never created and every weapon in the zone plays silence.
-    void RetargetLoadedSound(IW4::LoadedSound& source)
+    void RetargetLoadedSoundToIw4ms(IW4::LoadedSound& source)
     {
         static_assert(sizeof(IW4::MssSound) == sizeof(IW4MS::MssSound));
         static_assert(offsetof(IW4::MssSound, data) == offsetof(IW4MS::MssSound, data));
@@ -248,7 +248,7 @@ namespace
     constexpr auto IW4_GFX_AABB_TREE_SIZE = 44;
     constexpr auto IW4MS_GFX_AABB_TREE_SIZE = 56;
 
-    bool RetargetGfxWorld(IW4::GfxWorld& world, unsigned& rescaledOffsets)
+    bool RetargetGfxWorldToIw4ms(IW4::GfxWorld& world, unsigned& rescaledOffsets)
     {
         static_assert(sizeof(IW4MS::GfxAabbTree) == IW4MS_GFX_AABB_TREE_SIZE);
 
@@ -345,7 +345,7 @@ namespace
                         continue;
                     }
 
-                    auto* retargeted = RetargetWater(*textureDef.u.water, target->Memory());
+                    auto* retargeted = RetargetWaterToIw4ms(*textureDef.u.water, target->Memory());
                     retargetedWaters.emplace(textureDef.u.water, retargeted);
                     textureDef.u.water = reinterpret_cast<IW4::water_t*>(retargeted);
                     waters++;
@@ -367,7 +367,7 @@ namespace
                         continue;
                     }
 
-                    auto* retargeted = RetargetSpeakerMap(*alias.speakerMap, target->Memory());
+                    auto* retargeted = RetargetSpeakerMapToIw4ms(*alias.speakerMap, target->Memory());
                     retargetedSpeakerMaps.emplace(alias.speakerMap, retargeted);
                     alias.speakerMap = reinterpret_cast<IW4::SpeakerMap*>(retargeted);
                     speakerMaps++;
@@ -378,17 +378,17 @@ namespace
                 if (!asset->m_ptr)
                     continue;
 
-                RetargetLoadedSound(*static_cast<IW4::LoadedSound*>(asset->m_ptr));
+                RetargetLoadedSoundToIw4ms(*static_cast<IW4::LoadedSound*>(asset->m_ptr));
                 loadedSounds++;
             }
             else if (asset->m_type == IW4::ASSET_TYPE_FXWORLD)
             {
                 if (asset->m_ptr)
-                    glassPieces += RetargetFxWorld(*static_cast<IW4::FxWorld*>(asset->m_ptr), target->Memory());
+                    glassPieces += RetargetFxWorldToIw4ms(*static_cast<IW4::FxWorld*>(asset->m_ptr), target->Memory());
             }
             else if (asset->m_type == IW4::ASSET_TYPE_GFXWORLD)
             {
-                if (!RetargetGfxWorld(*static_cast<IW4::GfxWorld*>(asset->m_ptr), rescaledOffsets))
+                if (!RetargetGfxWorldToIw4ms(*static_cast<IW4::GfxWorld*>(asset->m_ptr), rescaledOffsets))
                     return nullptr;
             }
         }
@@ -400,7 +400,7 @@ namespace
 
             if (asset->m_type == IW4::ASSET_TYPE_CLIPMAP_SP || asset->m_type == IW4::ASSET_TYPE_CLIPMAP_MP)
             {
-                pointer = RetargetClipMap(*static_cast<const IW4::clipMap_t*>(pointer), target->Memory(), dynEntClients);
+                pointer = RetargetClipMapToIw4ms(*static_cast<const IW4::clipMap_t*>(pointer), target->Memory(), dynEntClients);
                 retargetedClipMaps++;
             }
 
