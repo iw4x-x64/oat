@@ -235,7 +235,7 @@ namespace
             }
             jRoot["dynEntDefList"] = std::move(jDynEnts);
 
-            world::WriteIfNonZero(jRoot, "padding", reinterpret_cast<const unsigned char(&)[108]>(clipMap.padding));
+            world::WriteIfNonZero(jRoot, "padding", reinterpret_cast<const unsigned char(&)[sizeof(clipMap.padding)]>(clipMap.padding));
 
             m_stream << std::setw(4) << jRoot << "\n";
         }
