@@ -85,6 +85,10 @@ different fastfile format. Needs an x64 build, and has to be named
 explicitly with `--game IW4MS` because its header is byte for byte
 identical to IW4's.
 
+Because it is the same game as IW4, a zone can be written back out as the
+other one instead of being dumped: `--convert-to IW4MS` on an IW4 zone and
+`--convert-to IW4` on an IW4MS zone. Both need an x64 build.
+
 Every type retail data actually contains is dumped. The nine that never occur are omitted
 from this table.
 
