@@ -1,8 +1,20 @@
-#include "LoaderEfxIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/FX/LoaderEfx" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderEfx" + GAME + ".h\""
+#set FACTORY_NAME "CreateEfxLoader" + GAME
+#set FLAGS_HEADER "\"Game/" + GAME + "/FX/FxElemFlags" + GAME + ".h\""
+
+// This file was templated.
+// See LoaderEfx.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "FX/EfxReader.h"
 #include "FX/FxCommon.h"
-#include "Game/IW4MS/FX/FxElemFlagsIW4MS.h"
+#include FLAGS_HEADER
 #include "Utils/Logging/Log.h"
 
 #include <algorithm>
@@ -14,7 +26,7 @@
 #include <unordered_map>
 #include <vector>
 
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -982,7 +994,7 @@ namespace
 
 namespace fx
 {
-    std::unique_ptr<AssetCreator<AssetFx>> CreateEfxLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetFx>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<FxLoader>(memory, searchPath);
     }
