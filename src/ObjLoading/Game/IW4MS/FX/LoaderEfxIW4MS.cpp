@@ -1,6 +1,6 @@
 #include "LoaderEfxIW4MS.h"
 
-#include "EfxReader.h"
+#include "FX/EfxReader.h"
 #include "FX/FxCommon.h"
 #include "Game/IW4MS/FX/FxElemFlagsIW4MS.h"
 #include "Utils/Logging/Log.h"
