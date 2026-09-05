@@ -1,0 +1,26 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/World/LoaderClipMap" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set FACTORY_SP_NAME "CreateClipMapSpLoader" + GAME
+#set FACTORY_MP_NAME "CreateClipMapMpLoader" + GAME
+
+// This file was templated.
+// See LoaderClipMap.h.template.
+// Do not modify, changes will be lost.
+
+#pragma once
+
+#include "Asset/IAssetCreator.h"
+#include GAME_HEADER
+#include "SearchPath/ISearchPath.h"
+#include "Utils/MemoryManager.h"
+
+#include <memory>
+
+namespace world
+{
+    std::unique_ptr<AssetCreator<GAME::AssetClipMapSp>> FACTORY_SP_NAME(MemoryManager& memory, ISearchPath& searchPath);
+    std::unique_ptr<AssetCreator<GAME::AssetClipMapMp>> FACTORY_MP_NAME(MemoryManager& memory, ISearchPath& searchPath);
+} // namespace world

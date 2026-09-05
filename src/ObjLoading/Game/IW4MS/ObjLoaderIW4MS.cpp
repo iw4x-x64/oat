@@ -19,6 +19,7 @@
 #include "Game/IW4MS/Vehicle/GdtLoaderVehicleIW4MS.h"
 #include "Game/IW4MS/Vehicle/RawLoaderVehicleIW4MS.h"
 #include "Game/IW4MS/Weapon/AccuracyGraphLoaderIW4MS.h"
+#include "Game/IW4MS/World/LoaderClipMapIW4MS.h"
 #include "Game/IW4MS/World/LoaderComWorldIW4MS.h"
 #include "Game/IW4MS/World/LoaderFxWorldIW4MS.h"
 #include "Game/IW4MS/World/LoaderGameWorldIW4MS.h"
@@ -42,7 +43,6 @@
 #include "StructuredDataDef/LoaderStructuredDataDefIW4MS.h"
 #include "Weapon/GdtLoaderWeaponIW4MS.h"
 #include "Weapon/RawLoaderWeaponIW4MS.h"
-#include "World/LoaderClipMapIW4MS.h"
 #include "World/LoaderGfxWorldIW4MS.h"
 
 #include <memory>

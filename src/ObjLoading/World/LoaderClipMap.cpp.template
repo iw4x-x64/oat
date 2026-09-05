@@ -1,4 +1,16 @@
-#include "LoaderClipMapIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/World/LoaderClipMap" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderClipMap" + GAME + ".h\""
+#set FACTORY_SP_NAME "CreateClipMapSpLoader" + GAME
+#set FACTORY_MP_NAME "CreateClipMapMpLoader" + GAME
+
+// This file was templated.
+// See LoaderClipMap.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "Utils/Logging/Log.h"
 #include "World/WorldCommon.h"
@@ -10,7 +22,7 @@
 #include <nlohmann/json.hpp>
 
 using namespace nlohmann;
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -529,12 +541,12 @@ namespace
 
 namespace world
 {
-    std::unique_ptr<AssetCreator<AssetClipMapSp>> CreateClipMapSpLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetClipMapSp>> FACTORY_SP_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<ClipMapLoader<AssetClipMapSp>>(memory, searchPath, GetClipMapSpJsonFileName, "clipmap_sp");
     }
 
-    std::unique_ptr<AssetCreator<AssetClipMapMp>> CreateClipMapMpLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetClipMapMp>> FACTORY_MP_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<ClipMapLoader<AssetClipMapMp>>(memory, searchPath, GetClipMapMpJsonFileName, "clipmap_mp");
     }
