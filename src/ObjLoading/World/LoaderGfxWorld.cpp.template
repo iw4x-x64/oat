@@ -1,4 +1,15 @@
-#include "LoaderGfxWorldIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/World/LoaderGfxWorld" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderGfxWorld" + GAME + ".h\""
+#set FACTORY_NAME "CreateGfxWorldLoader" + GAME
+
+// This file was templated.
+// See LoaderGfxWorld.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "Utils/Logging/Log.h"
 #include "World/WorldCommon.h"
@@ -10,7 +21,7 @@
 #include <nlohmann/json.hpp>
 
 using namespace nlohmann;
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -709,7 +720,7 @@ namespace
 
 namespace world
 {
-    std::unique_ptr<AssetCreator<AssetGfxWorld>> CreateGfxWorldLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetGfxWorld>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<GfxWorldLoader>(memory, searchPath);
     }

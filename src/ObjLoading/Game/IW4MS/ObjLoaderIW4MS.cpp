@@ -23,6 +23,7 @@
 #include "Game/IW4MS/World/LoaderComWorldIW4MS.h"
 #include "Game/IW4MS/World/LoaderFxWorldIW4MS.h"
 #include "Game/IW4MS/World/LoaderGameWorldIW4MS.h"
+#include "Game/IW4MS/World/LoaderGfxWorldIW4MS.h"
 #include "Game/IW4MS/XAnim/XAnimLoaderIW4MS.h"
 #include "Game/IW4MS/XModel/LoaderXModelIW4MS.h"
 #include "Leaderboard/LoaderLeaderboardIW4MS.h"
@@ -43,7 +44,6 @@
 #include "StructuredDataDef/LoaderStructuredDataDefIW4MS.h"
 #include "Weapon/GdtLoaderWeaponIW4MS.h"
 #include "Weapon/RawLoaderWeaponIW4MS.h"
-#include "World/LoaderGfxWorldIW4MS.h"
 
 #include <memory>
 #endif // ARCH_x64
