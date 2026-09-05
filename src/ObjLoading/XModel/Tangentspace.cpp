@@ -1,6 +1,5 @@
 #include "Tangentspace.h"
 
-#include <cassert>
 #include <cmath>
 #include <numbers>
 
@@ -151,18 +150,19 @@ namespace tangent_space
 
     void sub_10014EE0(const tvec3& src, tvec3& a2)
     {
-        assert(Vec3_IsNormalized(src));
+        tvec3 unit{src[0], src[1], src[2]};
+        Vec3_Normalize(unit);
 
-        const auto v4 = src[0] * src[0];
-        float v5 = src[1] * src[1];
-        float v6 = src[2] * src[2];
+        const auto v4 = unit[0] * unit[0];
+        float v5 = unit[1] * unit[1];
+        float v6 = unit[2] * unit[2];
         int v3 = v4 > v5;
         if (*(&v4 + v3) > v6)
             v3 = 2;
-        const auto srcc = -src[v3];
-        a2[0] = src[0] * srcc;
-        a2[1] = src[1] * srcc;
-        a2[2] = src[2] * srcc;
+        const auto srcc = -unit[v3];
+        a2[0] = unit[0] * srcc;
+        a2[1] = unit[1] * srcc;
+        a2[2] = unit[2] * srcc;
         a2[v3] = a2[v3] + 1.0f;
         Vec3_Normalize(a2);
     }
