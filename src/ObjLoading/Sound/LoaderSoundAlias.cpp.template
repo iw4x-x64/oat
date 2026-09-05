@@ -297,22 +297,22 @@ namespace
             const auto* type = Value(row, Column::TYPE);
             const auto streamed = type && *type == "streamed";
 
-            auto* soundFile = m_memory.Alloc<SoundFile>();
-            soundFile->type = streamed ? SAT_STREAMED : SAT_LOADED;
-            soundFile->exists = 1;
+            SoundFile soundFile{};
+            soundFile.type = streamed ? SAT_STREAMED : SAT_LOADED;
+            soundFile.exists = 1;
 
             if (streamed)
             {
                 const auto separator = fileName->rfind('/');
                 if (separator != std::string::npos)
                 {
-                    soundFile->u.streamSnd.dir = m_memory.DupShared(fileName->substr(0, separator));
-                    soundFile->u.streamSnd.name = m_memory.DupShared(fileName->substr(separator + 1u));
+                    soundFile.u.streamSnd.dir = m_memory.DupShared(fileName->substr(0, separator));
+                    soundFile.u.streamSnd.name = m_memory.DupShared(fileName->substr(separator + 1u));
                 }
                 else
                 {
-                    soundFile->u.streamSnd.dir = nullptr;
-                    soundFile->u.streamSnd.name = m_memory.DupShared(*fileName);
+                    soundFile.u.streamSnd.dir = nullptr;
+                    soundFile.u.streamSnd.name = m_memory.DupShared(*fileName);
                 }
             }
             else
@@ -325,10 +325,10 @@ namespace
                 }
 
                 m_registration.AddDependency(loadedSound);
-                soundFile->u.loadSnd = loadedSound->Asset();
+                soundFile.u.loadSnd = loadedSound->Asset();
             }
 
-            alias.soundFile = soundFile;
+            alias.soundFile = m_memory.AllocShared(soundFile);
 
             return true;
         }
