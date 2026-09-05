@@ -1,4 +1,19 @@
-#include "LoaderLoadedSoundIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/Sound/LoaderLoadedSound" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderLoadedSound" + GAME + ".h\""
+#set FACTORY_NAME "CreateLoadedSoundLoader" + GAME
+
+#if GAME == "IW4MS"
+#define FEATURE_IW4MS
+#endif
+
+// This file was templated.
+// See LoaderLoadedSound.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "Sound/LoadedSoundCommon.h"
 #include "Sound/WavReader.h"
@@ -6,7 +21,7 @@
 
 #include <cstdint>
 
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -48,6 +63,7 @@ namespace
             const auto blockAlign = static_cast<uint16_t>(metaData.channelCount * metaData.bitsPerSample / 8u);
 
             auto& sound = loadedSound->sound;
+#ifdef FEATURE_IW4MS
             sound.wFormatTag = static_cast<uint16_t>(WavFormat::PCM);
             sound.nChannels = static_cast<uint16_t>(metaData.channelCount);
             sound.nSamplesPerSec = metaData.samplesPerSec;
@@ -58,6 +74,17 @@ namespace
             sound.cbSize = 0u;
 
             sound.data_len = static_cast<unsigned>(dataLength);
+#else
+            sound.info.format = static_cast<int>(WavFormat::PCM);
+            sound.info.data_ptr = nullptr;
+            sound.info.data_len = static_cast<unsigned>(dataLength);
+            sound.info.rate = metaData.samplesPerSec;
+            sound.info.bits = static_cast<int>(metaData.bitsPerSample);
+            sound.info.channels = static_cast<int>(metaData.channelCount);
+            sound.info.samples = blockAlign > 0u ? static_cast<unsigned>(dataLength) / blockAlign : 0u;
+            sound.info.block_size = blockAlign;
+            sound.info.initial_ptr = nullptr;
+#endif
             sound.data = data;
 
             return AssetCreationResult::Success(context.AddAsset<AssetLoadedSound>(assetName, loadedSound));
@@ -71,7 +98,7 @@ namespace
 
 namespace sound
 {
-    std::unique_ptr<AssetCreator<AssetLoadedSound>> CreateLoadedSoundLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetLoadedSound>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<LoadedSoundLoader>(memory, searchPath);
     }

@@ -54,7 +54,7 @@ using `Linker`):
 | GfxImage                  | ✅               | ✅               | Includes the wavelet formats.                                                |
 | snd_alias_list_t          | ✅               | ❌               | Dumped as CSV. Some `flags` bits are still unidentified.                     |
 | SndCurve                  | ✅               | ✅               |                                                                              |
-| LoadedSound               | ✅               | ❌               |                                                                              |
+| LoadedSound               | ✅               | ✅               |                                                                              |
 | clipMap_t                 | ✅               | ✅               | JSON. Compiled map output: a `.map` compiles into it and cannot be recovered.|
 | ComWorld                  | ✅               | ✅               | JSON, as above.                                                              |
 | GameWorldSp               | ✅               | ✅               | JSON, as above.                                                              |
