@@ -15,6 +15,7 @@
 #include "Game/IW4/Vehicle/RawLoaderVehicleIW4.h"
 #include "Game/IW4/Weapon/AccuracyGraphLoaderIW4.h"
 #include "Game/IW4/World/LoaderComWorldIW4.h"
+#include "Game/IW4/World/LoaderFxWorldIW4.h"
 #include "Game/IW4/XAnim/XAnimLoaderIW4.h"
 #include "Game/IW4/XModel/LoaderXModelIW4.h"
 #include "Leaderboard/LoaderLeaderboardIW4.h"
@@ -149,7 +150,7 @@ namespace
         // collection.AddAssetCreator(std::make_unique<AssetLoaderGameWorldSp>(memory));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderGameWorldMp>(memory));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderMapEnts>(memory));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderFxWorld>(memory));
+        collection.AddAssetCreator(world::CreateFxWorldLoaderIW4(memory, searchPath));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderGfxWorld>(memory));
         collection.AddAssetCreator(light_def::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(font::CreateLoaderIW4(memory, searchPath));
