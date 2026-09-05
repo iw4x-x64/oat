@@ -20,8 +20,10 @@
 #include FLAGS_HEADER
 #include "Sound/SoundAliasCommon.h"
 
+#include <algorithm>
 #include <format>
 #include <string>
+#include <type_traits>
 
 using namespace GAME;
 
@@ -212,10 +214,44 @@ namespace
             return result;
         }
 #else
-        void WriteSpeakerMap([[maybe_unused]] const snd_alias_t& alias)
+        void WriteSpeakerMap(const snd_alias_t& alias)
         {
-            for (auto i = 0u; i < 5u; i++)
-                m_csv.WriteColumn("");
+            if (!alias.speakerMap)
+            {
+                for (auto i = 0u; i < 5u; i++)
+                    m_csv.WriteColumn("");
+                return;
+            }
+
+            m_csv.WriteColumn(alias.speakerMap->isDefault ? "1" : "0");
+
+            for (const auto& channelMaps : alias.speakerMap->channelMaps)
+            {
+                for (const auto& channelMap : channelMaps)
+                    m_csv.WriteColumn(SpeakerLevels(channelMap));
+            }
+        }
+
+        [[nodiscard]] static std::string SpeakerLevels(const MSSChannelMap& channelMap)
+        {
+            std::string result;
+
+            const auto speakerCount = std::min(static_cast<size_t>(channelMap.speakerCount), std::extent_v<decltype(channelMap.speakers)>);
+            for (auto i = 0u; i < speakerCount; i++)
+            {
+                const auto& speakers = channelMap.speakers[i];
+
+                if (!result.empty())
+                    result += ' ';
+
+                result += Num(speakers.speaker);
+
+                const auto levelCount = std::min(static_cast<size_t>(speakers.numLevels), std::extent_v<decltype(speakers.levels)>);
+                for (auto j = 0u; j < levelCount; j++)
+                    result += std::format(":{}", Num(speakers.levels[j]));
+            }
+
+            return result;
         }
 #endif
 
