@@ -15,10 +15,13 @@
 #include "World/WorldCommon.h"
 #include "World/WorldJsonLoadCommon.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <format>
 #include <iostream>
 #include <nlohmann/json.hpp>
+#include <vector>
 
 using namespace nlohmann;
 using namespace GAME;
@@ -220,12 +223,7 @@ namespace
 
                 const auto& jAabbTree = jCell.at("aabbTree");
                 gfxWorld.aabbTreeCounts[i] = static_cast<int>(jAabbTree.size());
-                gfxWorld.aabbTrees[i].aabbTree = world::Array<GfxAabbTree>(m_memory,
-                                                                           jAabbTree,
-                                                                           [this](const json& jTree, GfxAabbTree& tree)
-                                                                           {
-                                                                               LoadAabbTree(jTree, tree);
-                                                                           });
+                gfxWorld.aabbTrees[i].aabbTree = LoadAabbTrees(jAabbTree);
             }
 
             return success;
@@ -254,19 +252,65 @@ namespace
             return true;
         }
 
-        void LoadAabbTree(const json& jTree, GfxAabbTree& tree) const
+        [[nodiscard]] GfxAabbTree* LoadAabbTrees(const json& jAabbTree) const
         {
-            world::Bounds(jTree.at("bounds"), tree.bounds);
-            jTree.at("childCount").get_to(tree.childCount);
-            jTree.at("surfaceCount").get_to(tree.surfaceCount);
-            jTree.at("startSurfIndex").get_to(tree.startSurfIndex);
-            jTree.at("surfaceCountNoDecal").get_to(tree.surfaceCountNoDecal);
-            jTree.at("startSurfIndexNoDecal").get_to(tree.startSurfIndexNoDecal);
-            jTree.at("childrenOffset").get_to(tree.childrenOffset);
+            const auto& jTrees = jAabbTree.get_ref<const json::array_t&>();
+            if (jTrees.empty())
+                return nullptr;
 
-            const auto& jSmodelIndexes = jTree.at("smodelIndexes");
-            tree.smodelIndexCount = static_cast<uint16_t>(jSmodelIndexes.size());
-            tree.smodelIndexes = world::Array<StaticModelIndex>(m_memory, jSmodelIndexes);
+            std::vector<std::vector<StaticModelIndex>> smodelIndexes;
+            smodelIndexes.reserve(jTrees.size());
+            for (const auto& jTree : jTrees)
+            {
+                auto& indexes = smodelIndexes.emplace_back();
+                const auto& jSmodelIndexes = jTree.at("smodelIndexes").get_ref<const json::array_t&>();
+                indexes.reserve(jSmodelIndexes.size());
+                for (const auto& jSmodelIndex : jSmodelIndexes)
+                    indexes.emplace_back(jSmodelIndex.get<StaticModelIndex>());
+            }
+
+            const auto& pool = smodelIndexes.front();
+            auto* pooledIndexes = pool.empty() ? nullptr : m_memory.Alloc<StaticModelIndex>(pool.size());
+            if (pooledIndexes)
+                std::memcpy(pooledIndexes, pool.data(), pool.size() * sizeof(StaticModelIndex));
+
+            auto* trees = m_memory.Alloc<GfxAabbTree>(jTrees.size());
+            for (auto i = 0u; i < jTrees.size(); i++)
+            {
+                auto& tree = trees[i];
+                const auto& jTree = jTrees[i];
+
+                world::Bounds(jTree.at("bounds"), tree.bounds);
+                jTree.at("childCount").get_to(tree.childCount);
+                jTree.at("surfaceCount").get_to(tree.surfaceCount);
+                jTree.at("startSurfIndex").get_to(tree.startSurfIndex);
+                jTree.at("surfaceCountNoDecal").get_to(tree.surfaceCountNoDecal);
+                jTree.at("startSurfIndexNoDecal").get_to(tree.startSurfIndexNoDecal);
+                jTree.at("childrenOffset").get_to(tree.childrenOffset);
+
+                const auto& indexes = smodelIndexes[i];
+                tree.smodelIndexCount = static_cast<uint16_t>(indexes.size());
+                tree.smodelIndexes = SliceOfPool(pooledIndexes, pool, indexes);
+            }
+
+            return trees;
+        }
+
+        [[nodiscard]] StaticModelIndex* SliceOfPool(StaticModelIndex* pooledIndexes,
+                                                    const std::vector<StaticModelIndex>& pool,
+                                                    const std::vector<StaticModelIndex>& indexes) const
+        {
+            if (!pooledIndexes || indexes.empty())
+                return nullptr;
+
+            const auto found = std::ranges::search(pool, indexes);
+            if (!found.empty())
+                return pooledIndexes + std::ranges::distance(pool.begin(), found.begin());
+
+            auto* separate = m_memory.Alloc<StaticModelIndex>(indexes.size());
+            std::memcpy(separate, indexes.data(), indexes.size() * sizeof(StaticModelIndex));
+
+            return separate;
         }
 
         bool LoadDraw(const json& jDraw, GfxWorldDraw& draw) const
