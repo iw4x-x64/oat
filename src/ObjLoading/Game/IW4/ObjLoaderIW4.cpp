@@ -14,6 +14,7 @@
 #include "Game/IW4/Vehicle/GdtLoaderVehicleIW4.h"
 #include "Game/IW4/Vehicle/RawLoaderVehicleIW4.h"
 #include "Game/IW4/Weapon/AccuracyGraphLoaderIW4.h"
+#include "Game/IW4/World/LoaderComWorldIW4.h"
 #include "Game/IW4/XAnim/XAnimLoaderIW4.h"
 #include "Game/IW4/XModel/LoaderXModelIW4.h"
 #include "Leaderboard/LoaderLeaderboardIW4.h"
@@ -144,7 +145,7 @@ namespace
         collection.AddAssetCreator(sound_curve::CreateLoaderIW4(memory, searchPath));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderLoadedSound>(memory));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderClipMap>(memory));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderComWorld>(memory));
+        collection.AddAssetCreator(world::CreateComWorldLoaderIW4(memory, searchPath));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderGameWorldSp>(memory));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderGameWorldMp>(memory));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderMapEnts>(memory));

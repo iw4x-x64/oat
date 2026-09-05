@@ -1,4 +1,15 @@
-#include "LoaderComWorldIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/World/LoaderComWorld" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderComWorld" + GAME + ".h\""
+#set FACTORY_NAME "CreateComWorldLoader" + GAME
+
+// This file was templated.
+// See LoaderComWorld.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "Utils/Logging/Log.h"
 #include "World/WorldCommon.h"
@@ -9,7 +20,7 @@
 #include <nlohmann/json.hpp>
 
 using namespace nlohmann;
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -130,7 +141,7 @@ namespace
 
 namespace world
 {
-    std::unique_ptr<AssetCreator<AssetComWorld>> CreateComWorldLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetComWorld>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<ComWorldLoader>(memory, searchPath);
     }
