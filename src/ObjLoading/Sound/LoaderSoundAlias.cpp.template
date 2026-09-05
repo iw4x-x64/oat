@@ -179,7 +179,7 @@ namespace
         {
             const auto* value = Value(row, column);
 
-            return value ? m_memory.Dup(value->c_str()) : nullptr;
+            return value ? m_memory.DupShared(*value) : nullptr;
         }
 
         [[nodiscard]] float Float(const std::vector<CsvCell>& row, const Column column) const
@@ -306,13 +306,13 @@ namespace
                 const auto separator = fileName->rfind('/');
                 if (separator != std::string::npos)
                 {
-                    soundFile->u.streamSnd.dir = m_memory.Dup(fileName->substr(0, separator).c_str());
-                    soundFile->u.streamSnd.name = m_memory.Dup(fileName->substr(separator + 1u).c_str());
+                    soundFile->u.streamSnd.dir = m_memory.DupShared(fileName->substr(0, separator));
+                    soundFile->u.streamSnd.name = m_memory.DupShared(fileName->substr(separator + 1u));
                 }
                 else
                 {
                     soundFile->u.streamSnd.dir = nullptr;
-                    soundFile->u.streamSnd.name = m_memory.Dup(fileName->c_str());
+                    soundFile->u.streamSnd.name = m_memory.DupShared(*fileName);
                 }
             }
             else
@@ -393,7 +393,7 @@ namespace
 
             auto* speakerMap = m_memory.Alloc<SpeakerMap>();
             speakerMap->isDefault = *isDefault != "0";
-            speakerMap->name = name ? m_memory.Dup(name->c_str()) : nullptr;
+            speakerMap->name = name ? m_memory.DupShared(*name) : nullptr;
 
             for (auto i = 0u; i < std::extent_v<decltype(LEVEL_COLUMNS)>; i++)
             {
@@ -563,7 +563,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* aliasList = m_memory.Alloc<snd_alias_list_t>();
-            aliasList->aliasName = m_memory.Dup(assetName.c_str());
+            aliasList->aliasName = m_memory.DupShared(assetName);
 
             AssetRegistration<AssetSound> registration(assetName, aliasList);
 

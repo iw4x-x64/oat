@@ -193,7 +193,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* physCollmap = m_memory.Alloc<PhysCollmap>();
-            physCollmap->name = m_memory.Dup(assetName.c_str());
+            physCollmap->name = m_memory.DupShared(assetName);
 
             const JsonLoader loader(*file.m_stream, m_memory);
             if (!loader.Load(*physCollmap))

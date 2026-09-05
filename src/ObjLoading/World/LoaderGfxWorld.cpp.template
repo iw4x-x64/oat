@@ -95,7 +95,7 @@ namespace
         bool LoadGfxWorld(const json& jRoot, GfxWorld& gfxWorld) const
         {
             const auto& baseName = jRoot.at("baseName").get_ref<const std::string&>();
-            gfxWorld.baseName = !baseName.empty() ? m_memory.Dup(baseName.c_str()) : nullptr;
+            gfxWorld.baseName = !baseName.empty() ? m_memory.DupShared(baseName) : nullptr;
 
             jRoot.at("checksum").get_to(gfxWorld.checksum);
             jRoot.at("mapVtxChecksum").get_to(gfxWorld.mapVtxChecksum);
@@ -701,7 +701,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* gfxWorld = m_memory.Alloc<GfxWorld>();
-            gfxWorld->name = m_memory.Dup(assetName.c_str());
+            gfxWorld->name = m_memory.DupShared(assetName);
 
             AssetRegistration<AssetGfxWorld> registration(assetName, gfxWorld);
 

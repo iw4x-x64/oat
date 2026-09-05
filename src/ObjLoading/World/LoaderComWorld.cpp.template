@@ -29,8 +29,7 @@ namespace
     public:
         JsonLoader(std::istream& stream, MemoryManager& memory)
             : m_stream(stream),
-              m_memory(memory),
-              m_shared(memory)
+              m_memory(memory)
         {
         }
 
@@ -101,12 +100,12 @@ namespace
             jLight.at("rotationLimit").get_to(light.rotationLimit);
             jLight.at("translationLimit").get_to(light.translationLimit);
 
-            light.defName = m_shared.String(jLight.at("defName").get_ref<const std::string&>());
+            const auto& defName = jLight.at("defName").get_ref<const std::string&>();
+            light.defName = !defName.empty() ? m_memory.DupShared(defName) : nullptr;
         }
 
         std::istream& m_stream;
         MemoryManager& m_memory;
-        mutable world::SharedAllocations m_shared;
     };
 
     class ComWorldLoader final : public AssetCreator<AssetComWorld>
@@ -125,7 +124,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* comWorld = m_memory.Alloc<ComWorld>();
-            comWorld->name = m_memory.Dup(assetName.c_str());
+            comWorld->name = m_memory.DupShared(assetName);
 
             const JsonLoader loader(*file.m_stream, m_memory);
             if (!loader.Load(*comWorld))

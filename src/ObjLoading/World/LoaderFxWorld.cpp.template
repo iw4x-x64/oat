@@ -233,7 +233,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* fxWorld = m_memory.Alloc<FxWorld>();
-            fxWorld->name = m_memory.Dup(assetName.c_str());
+            fxWorld->name = m_memory.DupShared(assetName);
 
             AssetRegistration<AssetFxWorld> registration(assetName, fxWorld);
 

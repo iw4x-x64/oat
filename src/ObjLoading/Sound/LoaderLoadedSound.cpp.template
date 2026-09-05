@@ -51,7 +51,7 @@ namespace
             }
 
             auto* loadedSound = m_memory.Alloc<LoadedSound>();
-            loadedSound->name = m_memory.Dup(assetName.c_str());
+            loadedSound->name = m_memory.DupShared(assetName);
 
             auto* data = m_memory.Alloc<char>(dataLength);
             if (!reader.ReadData(data, dataLength))

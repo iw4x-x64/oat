@@ -830,7 +830,7 @@ namespace
 
             m_registration.AddIndirectAssetReference(m_context.LoadIndirectAssetReference<AssetFx>(name));
 
-            return m_memory.Dup(name.c_str());
+            return m_memory.DupShared(name);
         }
 
         bool CreateVisuals(const ElemSource& elem, FxElemDef& def)
@@ -894,7 +894,7 @@ namespace
                 return true;
 
             case FX_ELEM_TYPE_SOUND:
-                visual.soundName = !name.empty() ? m_memory.Dup(name.c_str()) : nullptr;
+                visual.soundName = !name.empty() ? m_memory.DupShared(name) : nullptr;
                 return true;
 
             case FX_ELEM_TYPE_SPRITE_BILLBOARD:
@@ -975,7 +975,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* fx = m_memory.Alloc<FxEffectDef>();
-            fx->name = m_memory.Dup(assetName.c_str());
+            fx->name = m_memory.DupShared(assetName);
 
             AssetRegistration<AssetFx> registration(assetName, fx);
 

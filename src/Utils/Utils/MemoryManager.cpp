@@ -33,12 +33,30 @@ char* MemoryManager::Dup(const char* str)
     return result;
 }
 
+const char* MemoryManager::DupShared(const std::string& str)
+{
+    const auto existing = m_shared_strings.find(str);
+    if (existing != m_shared_strings.end())
+        return existing->second;
+
+    const auto* result = Dup(str.c_str());
+    m_shared_strings.emplace(str, result);
+
+    return result;
+}
+
 void MemoryManager::Free(const void* data)
 {
     for (auto iAlloc = m_allocations.begin(); iAlloc != m_allocations.end(); ++iAlloc)
     {
         if (*iAlloc == data)
         {
+            std::erase_if(m_shared_strings,
+                          [data](const auto& shared)
+                          {
+                              return shared.second == data;
+                          });
+
             free(*iAlloc);
             m_allocations.erase(iAlloc);
             return;

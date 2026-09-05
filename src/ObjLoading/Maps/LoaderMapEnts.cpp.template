@@ -97,7 +97,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* mapEnts = m_memory.Alloc<MapEnts>();
-            mapEnts->name = m_memory.Dup(assetName.c_str());
+            mapEnts->name = m_memory.DupShared(assetName);
 
             if (!LoadEntityString(file, mapEnts->entityString, mapEnts->numEntityChars, m_memory))
             {
@@ -132,7 +132,7 @@ namespace
                                                  [this](const json& jStage, Stage& stage)
                                                  {
                                                      const auto& name = jStage.at("name").get_ref<const std::string&>();
-                                                     stage.name = !name.empty() ? m_memory.Dup(name.c_str()) : nullptr;
+                                                     stage.name = !name.empty() ? m_memory.DupShared(name) : nullptr;
 
                                                      world::Vec(jStage.at("origin"), stage.origin);
                                                      jStage.at("triggerIndex").get_to(stage.triggerIndex);
@@ -160,7 +160,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* addonMapEnts = m_memory.Alloc<AddonMapEnts>();
-            addonMapEnts->name = m_memory.Dup(assetName.c_str());
+            addonMapEnts->name = m_memory.DupShared(assetName);
 
             if (!LoadEntityString(file, addonMapEnts->entityString, addonMapEnts->numEntityChars, m_memory))
             {

@@ -293,7 +293,7 @@ namespace
         void LoadSegment(const json& jSegment, VehicleTrackSegment& segment) const
         {
             const auto& targetName = jSegment.at("targetName").get_ref<const std::string&>();
-            segment.targetName = !targetName.empty() ? m_memory.Dup(targetName.c_str()) : nullptr;
+            segment.targetName = !targetName.empty() ? m_memory.DupShared(targetName) : nullptr;
 
             const auto& jSectors = jSegment.at("sectors");
             segment.sectorCount = static_cast<unsigned>(jSectors.size());
@@ -356,7 +356,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* gameWorld = m_memory.Alloc<GameWorldSp>();
-            gameWorld->name = m_memory.Dup(assetName.c_str());
+            gameWorld->name = m_memory.DupShared(assetName);
 
             AssetRegistration<AssetGameWorldSp> registration(assetName, gameWorld);
 
@@ -389,7 +389,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* gameWorld = m_memory.Alloc<GameWorldMp>();
-            gameWorld->name = m_memory.Dup(assetName.c_str());
+            gameWorld->name = m_memory.DupShared(assetName);
 
             if (!Load(*gameWorld, *file.m_stream))
                 return AssetCreationResult::Failure();

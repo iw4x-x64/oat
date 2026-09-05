@@ -201,7 +201,7 @@ namespace
                 return AssetCreationResult::NoAction();
 
             auto* impactTable = m_memory.Alloc<FxImpactTable>();
-            impactTable->name = m_memory.Dup(assetName.c_str());
+            impactTable->name = m_memory.DupShared(assetName);
 
             AssetRegistration<AssetImpactFx> registration(assetName, impactTable);
 
