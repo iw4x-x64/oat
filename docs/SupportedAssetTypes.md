@@ -76,7 +76,7 @@ using `Linker`):
 | StructuredDataDefSet      | ✅               | ✅               | The format is custom due to lacking information about original format.       |
 | TracerDef                 | ✅               | ✅               |                                                                              |
 | VehicleDef                | ✅               | ✅               |                                                                              |
-| AddonMapEnts              | ⁉️              | ❌               | MapEnts String can be exported. Binary data currently not.                   |
+| AddonMapEnts              | ✅               | ✅               | Entity string, trigger volumes as json beside it.                            |
 
 ## IW4MS (Call of Duty: Modern Warfare 2 - Microsoft x64 release)
 

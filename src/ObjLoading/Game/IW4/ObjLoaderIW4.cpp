@@ -179,7 +179,7 @@ namespace
         collection.AddAssetCreator(tracer::CreateGdtLoaderIW4(memory, gdt, zone));
         collection.AddAssetCreator(vehicle::CreateRawLoaderIW4(memory, searchPath, zone));
         collection.AddAssetCreator(vehicle::CreateGdtLoaderIW4(memory, gdt, zone));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderAddonMapEnts>(memory));
+        collection.AddAssetCreator(addon_map_ents::CreateLoaderIW4(memory, searchPath));
 
         collection.AddSubAssetCreator(weapon::CreateAccuracyGraphLoaderIW4(memory, searchPath));
     }
