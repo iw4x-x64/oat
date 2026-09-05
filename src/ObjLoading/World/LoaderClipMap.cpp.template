@@ -137,14 +137,14 @@ namespace
         void LoadPlanes(const json& jPlanes, clipMap_t& clipMap) const
         {
             clipMap.planeCount = static_cast<int>(jPlanes.size());
-            clipMap.planes = world::Array<cplane_s>(m_memory,
-                                                    jPlanes,
-                                                    [](const json& jPlane, cplane_s& plane)
-                                                    {
-                                                        world::Vec(jPlane.at("normal"), plane.normal);
-                                                        jPlane.at("dist").get_to(plane.dist);
-                                                        plane.type = static_cast<char>(jPlane.at("type").get<int>());
-                                                    });
+            clipMap.planes = world::SharedArray<cplane_s>(m_memory,
+                                                          jPlanes,
+                                                          [](const json& jPlane, cplane_s& plane)
+                                                          {
+                                                              world::Vec(jPlane.at("normal"), plane.normal);
+                                                              jPlane.at("dist").get_to(plane.dist);
+                                                              plane.type = static_cast<char>(jPlane.at("type").get<int>());
+                                                          });
         }
 
         void LoadMaterials(const json& jMaterials, clipMap_t& clipMap) const

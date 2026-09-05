@@ -33,6 +33,21 @@ char* MemoryManager::Dup(const char* str)
     return result;
 }
 
+void* MemoryManager::AllocSharedRaw(const void* data, const size_t size)
+{
+    std::string key(static_cast<const char*>(data), size);
+
+    const auto existing = m_shared_data.find(key);
+    if (existing != m_shared_data.end())
+        return existing->second;
+
+    auto* result = AllocRaw(size);
+    memcpy(result, data, size);
+    m_shared_data.emplace(std::move(key), result);
+
+    return result;
+}
+
 const char* MemoryManager::DupShared(const std::string& str)
 {
     const auto existing = m_shared_strings.find(str);
@@ -52,6 +67,11 @@ void MemoryManager::Free(const void* data)
         if (*iAlloc == data)
         {
             std::erase_if(m_shared_strings,
+                          [data](const auto& shared)
+                          {
+                              return shared.second == data;
+                          });
+            std::erase_if(m_shared_data,
                           [data](const auto& shared)
                           {
                               return shared.second == data;

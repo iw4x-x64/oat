@@ -172,14 +172,14 @@ namespace
 
             const auto& jPlaneArray = jPlanes.at("planes");
             gfxWorld.planeCount = static_cast<int>(jPlaneArray.size());
-            planes.planes = world::Array<cplane_s>(m_memory,
-                                                   jPlaneArray,
-                                                   [](const json& jPlane, cplane_s& plane)
-                                                   {
-                                                       world::Vec(jPlane.at("normal"), plane.normal);
-                                                       jPlane.at("dist").get_to(plane.dist);
-                                                       plane.type = static_cast<char>(jPlane.at("type").get<int>());
-                                                   });
+            planes.planes = world::SharedArray<cplane_s>(m_memory,
+                                                         jPlaneArray,
+                                                         [](const json& jPlane, cplane_s& plane)
+                                                         {
+                                                             world::Vec(jPlane.at("normal"), plane.normal);
+                                                             jPlane.at("dist").get_to(plane.dist);
+                                                             plane.type = static_cast<char>(jPlane.at("type").get<int>());
+                                                         });
 
             const auto nodes = world::Base64(m_memory, jPlanes.at("nodes"));
             planes.nodes = static_cast<uint16_t*>(nodes.data);

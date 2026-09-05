@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace world
 {
@@ -39,6 +40,20 @@ namespace world
             transform(jElements[i], elements[i]);
 
         return elements;
+    }
+
+    template<typename ElementType, typename TransformFn>
+    [[nodiscard]] ElementType* SharedArray(MemoryManager& memory, const nlohmann::json& jArray, TransformFn&& transform)
+    {
+        const auto& jElements = jArray.get_ref<const nlohmann::json::array_t&>();
+        if (jElements.empty())
+            return nullptr;
+
+        std::vector<ElementType> elements(jElements.size());
+        for (auto i = 0u; i < jElements.size(); i++)
+            transform(jElements[i], elements[i]);
+
+        return memory.AllocShared(elements);
     }
 
     template<typename ElementType> [[nodiscard]] ElementType* Array(MemoryManager& memory, const nlohmann::json& jArray)
