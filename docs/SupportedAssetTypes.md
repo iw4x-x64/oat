@@ -59,7 +59,7 @@ using `Linker`):
 | ComWorld                  | ✅               | ✅               | JSON, as above.                                                              |
 | GameWorldSp               | ✅               | ✅               | JSON, as above.                                                              |
 | GameWorldMp               | ✅               | ✅               | JSON, as above.                                                              |
-| MapEnts                   | ⁉️              | ❌               | Entity string can be exported. Binary data currently not.                    |
+| MapEnts                   | ✅               | ✅               | Entity string as `.ents`, trigger volumes and stages as json beside it.      |
 | FxWorld                   | ✅               | ✅               | JSON, as above.                                                              |
 | GfxWorld                  | ✅               | ✅               | JSON, as above.                                                              |
 | GfxLightDef               | ✅               | ✅               |                                                                              |

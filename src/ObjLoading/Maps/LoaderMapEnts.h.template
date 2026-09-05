@@ -1,0 +1,31 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/Maps/LoaderMapEnts" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set FACTORY_NAME "CreateLoader" + GAME
+#set LOAD_TRIGGERS_JSON "LoadTriggersJson" + GAME
+#set TRIGGERS_HEADER "\"MapTriggersJson" + GAME + ".h\""
+
+// This file was templated.
+// See LoaderMapEnts.h.template.
+// Do not modify, changes will be lost.
+
+#pragma once
+
+#include "Asset/IAssetCreator.h"
+#include GAME_HEADER
+#include "SearchPath/ISearchPath.h"
+#include "Utils/MemoryManager.h"
+
+#include <memory>
+
+namespace map_ents
+{
+    std::unique_ptr<AssetCreator<GAME::AssetMapEnts>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath);
+} // namespace map_ents
+
+namespace addon_map_ents
+{
+    std::unique_ptr<AssetCreator<GAME::AssetAddonMapEnts>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath);
+} // namespace addon_map_ents

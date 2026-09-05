@@ -1,0 +1,26 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/Maps/MapEntsJsonDumper" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set CLASS_NAME "JsonDumper" + GAME
+#set CREATE_TRIGGERS_JSON "CreateTriggersJson" + GAME
+#set TRIGGERS_HEADER "\"MapTriggersJson" + GAME + ".h\""
+
+// This file was templated.
+// See MapEntsJsonDumper.h.template.
+// Do not modify, changes will be lost.
+
+#pragma once
+
+#include "Dumping/AbstractAssetDumper.h"
+#include GAME_HEADER
+
+namespace map_ents
+{
+    class CLASS_NAME final : public AbstractAssetDumper<GAME::AssetMapEnts>
+    {
+    protected:
+        void DumpAsset(AssetDumpingContext& context, const XAssetInfo<GAME::AssetMapEnts::Type>& asset) override;
+    };
+} // namespace map_ents

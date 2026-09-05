@@ -1,6 +1,19 @@
-#include "LoaderMapEntsIW4MS.h"
+#options GAME (IW4, IW4MS)
 
-#include "MapTriggersJsonIW4MS.h"
+#filename "Game/" + GAME + "/Maps/LoaderMapEnts" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderMapEnts" + GAME + ".h\""
+#set FACTORY_NAME "CreateLoader" + GAME
+#set LOAD_TRIGGERS_JSON "LoadTriggersJson" + GAME
+#set TRIGGERS_HEADER "\"MapTriggersJson" + GAME + ".h\""
+
+// This file was templated.
+// See LoaderMapEnts.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
+
+#include TRIGGERS_HEADER
 #include "Maps/MapEntsCommon.h"
 #include "Utils/Logging/Log.h"
 #include "World/WorldJsonLoadCommon.h"
@@ -9,7 +22,7 @@
 #include <nlohmann/json.hpp>
 
 using namespace nlohmann;
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -110,7 +123,7 @@ namespace
     private:
         void LoadTriggersAndStages(const json& jRoot, MapEnts& mapEnts) const
         {
-            map_ents::LoadTriggersJsonIW4MS(jRoot.at("trigger"), mapEnts.trigger, m_memory);
+            map_ents::LOAD_TRIGGERS_JSON(jRoot.at("trigger"), mapEnts.trigger, m_memory);
 
             const auto& jStages = jRoot.at("stages");
             mapEnts.stageCount = static_cast<char>(jStages.size());
@@ -161,7 +174,7 @@ namespace
                                  assetName,
                                  [this, addonMapEnts](const json& jRoot)
                                  {
-                                     map_ents::LoadTriggersJsonIW4MS(jRoot.at("trigger"), addonMapEnts->trigger, m_memory);
+                                     map_ents::LOAD_TRIGGERS_JSON(jRoot.at("trigger"), addonMapEnts->trigger, m_memory);
                                  }))
             {
                 return AssetCreationResult::Failure();
@@ -178,7 +191,7 @@ namespace
 
 namespace map_ents
 {
-    std::unique_ptr<AssetCreator<AssetMapEnts>> CreateLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetMapEnts>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<MapEntsLoader>(memory, searchPath);
     }
@@ -186,7 +199,7 @@ namespace map_ents
 
 namespace addon_map_ents
 {
-    std::unique_ptr<AssetCreator<AssetAddonMapEnts>> CreateLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetAddonMapEnts>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<AddonMapEntsLoader>(memory, searchPath);
     }

@@ -1,7 +1,7 @@
 #include "AddonMapEntsDumperIW4MS.h"
 
 #include "Dumping/AssetDumpingContext.h"
-#include "MapTriggersJsonIW4MS.h"
+#include "Game/IW4MS/Maps/MapTriggersJsonIW4MS.h"
 #include "Maps/MapEntsCommon.h"
 
 #include <algorithm>

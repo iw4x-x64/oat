@@ -1,6 +1,17 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/Maps/MapTriggersJson" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set LOAD_TRIGGERS_JSON "LoadTriggersJson" + GAME
+
+// This file was templated.
+// See MapTriggersJson.h.template.
+// Do not modify, changes will be lost.
+
 #pragma once
 
-#include "Game/IW4MS/IW4MS.h"
+#include GAME_HEADER
 #include "Utils/MemoryManager.h"
 #include "World/WorldJsonLoadCommon.h"
 
@@ -8,13 +19,13 @@
 
 namespace map_ents
 {
-    inline void LoadTriggersJsonIW4MS(const nlohmann::json& jTriggers, IW4MS::MapTriggers& triggers, MemoryManager& memory)
+    inline void LOAD_TRIGGERS_JSON(const nlohmann::json& jTriggers, GAME::MapTriggers& triggers, MemoryManager& memory)
     {
         const auto& jModels = jTriggers.at("models");
         triggers.count = static_cast<unsigned>(jModels.size());
-        triggers.models = world::Array<IW4MS::TriggerModel>(memory,
+        triggers.models = world::Array<GAME::TriggerModel>(memory,
                                                             jModels,
-                                                            [](const nlohmann::json& jModel, IW4MS::TriggerModel& model)
+                                                            [](const nlohmann::json& jModel, GAME::TriggerModel& model)
                                                             {
                                                                 jModel.at("contents").get_to(model.contents);
                                                                 jModel.at("hullCount").get_to(model.hullCount);
@@ -23,9 +34,9 @@ namespace map_ents
 
         const auto& jHulls = jTriggers.at("hulls");
         triggers.hullCount = static_cast<unsigned>(jHulls.size());
-        triggers.hulls = world::Array<IW4MS::TriggerHull>(memory,
+        triggers.hulls = world::Array<GAME::TriggerHull>(memory,
                                                           jHulls,
-                                                          [](const nlohmann::json& jHull, IW4MS::TriggerHull& hull)
+                                                          [](const nlohmann::json& jHull, GAME::TriggerHull& hull)
                                                           {
                                                               world::Bounds(jHull.at("bounds"), hull.bounds);
                                                               jHull.at("contents").get_to(hull.contents);
@@ -35,9 +46,9 @@ namespace map_ents
 
         const auto& jSlabs = jTriggers.at("slabs");
         triggers.slabCount = static_cast<unsigned>(jSlabs.size());
-        triggers.slabs = world::Array<IW4MS::TriggerSlab>(memory,
+        triggers.slabs = world::Array<GAME::TriggerSlab>(memory,
                                                           jSlabs,
-                                                          [](const nlohmann::json& jSlab, IW4MS::TriggerSlab& slab)
+                                                          [](const nlohmann::json& jSlab, GAME::TriggerSlab& slab)
                                                           {
                                                               world::Vec(jSlab.at("dir"), slab.dir);
                                                               jSlab.at("midPoint").get_to(slab.midPoint);

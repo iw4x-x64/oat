@@ -5,6 +5,7 @@
 #include "Game/IW4/Font/FontDumperIW4.h"
 #include "Game/IW4/Image/ImageDumperIW4.h"
 #include "Game/IW4/Maps/MapEntsDumperIW4.h"
+#include "Game/IW4/Maps/MapEntsJsonDumperIW4.h"
 #include "Game/IW4/Material/MaterialJsonDumperIW4.h"
 #include "Game/IW4/Sound/SndAliasListCsvDumperIW4.h"
 #include "Game/IW4/Techset/PixelShaderDumperIW4.h"
@@ -77,6 +78,7 @@ void ObjWriter::RegisterAssetDumpers(AssetDumpingContext& context)
     // REGISTER_DUMPER(AssetDumperGameWorldSp)
     // REGISTER_DUMPER(AssetDumperGameWorldMp)
     RegisterAssetDumper(std::make_unique<map_ents::DumperIW4>());
+    RegisterAssetDumper(std::make_unique<map_ents::JsonDumperIW4>());
     // REGISTER_DUMPER(AssetDumperFxWorld)
     // REGISTER_DUMPER(AssetDumperGfxWorld)
     RegisterAssetDumper(std::make_unique<light_def::DumperIW4>());

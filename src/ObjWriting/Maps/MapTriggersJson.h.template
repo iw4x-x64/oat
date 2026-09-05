@@ -1,19 +1,30 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/Maps/MapTriggersJson" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set CREATE_TRIGGERS_JSON "CreateTriggersJson" + GAME
+
+// This file was templated.
+// See MapTriggersJson.h.template.
+// Do not modify, changes will be lost.
+
 #pragma once
 
-#include "Game/IW4MS/IW4MS.h"
+#include GAME_HEADER
 #include "World/WorldJsonCommon.h"
 
 #include <nlohmann/json.hpp>
 
 namespace map_ents
 {
-    [[nodiscard]] inline nlohmann::json CreateTriggersJsonIW4MS(const IW4MS::MapTriggers& triggers)
+    [[nodiscard]] inline nlohmann::json CREATE_TRIGGERS_JSON(const GAME::MapTriggers& triggers)
     {
         return nlohmann::json{
             {"models",
              world::Array(triggers.models,
              triggers.count,
-             [](const IW4MS::TriggerModel& model)
+             [](const GAME::TriggerModel& model)
                           {
                               return nlohmann::json{
                                   {                                "contents",                model.contents},
@@ -24,7 +35,7 @@ namespace map_ents
             {"hulls",
              world::Array(triggers.hulls,
              triggers.hullCount,
-             [](const IW4MS::TriggerHull& hull)
+             [](const GAME::TriggerHull& hull)
                           {
                               return nlohmann::json{
                                   {"bounds", world::Bounds(hull.bounds)},
@@ -36,7 +47,7 @@ namespace map_ents
             {"slabs",
              world::Array(triggers.slabs,
              triggers.slabCount,
-             [](const IW4MS::TriggerSlab& slab)
+             [](const GAME::TriggerSlab& slab)
                           {
                               return nlohmann::json{
                                   {"dir", world::Vec3(slab.dir)},

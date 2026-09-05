@@ -1,18 +1,31 @@
-#include "MapEntsJsonDumperIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/Maps/MapEntsJsonDumper" + GAME + ".cpp"
+
+#set DUMPER_HEADER "\"MapEntsJsonDumper" + GAME + ".h\""
+#set CLASS_NAME "JsonDumper" + GAME
+#set CREATE_TRIGGERS_JSON "CreateTriggersJson" + GAME
+#set TRIGGERS_HEADER "\"MapTriggersJson" + GAME + ".h\""
+
+// This file was templated.
+// See MapEntsJsonDumper.cpp.template.
+// Do not modify, changes will be lost.
+
+#include DUMPER_HEADER
 
 #include "Dumping/AssetDumpingContext.h"
-#include "MapTriggersJsonIW4MS.h"
+#include TRIGGERS_HEADER
 #include "Maps/MapEntsCommon.h"
 
 #include <iomanip>
 #include <nlohmann/json.hpp>
 
 using namespace nlohmann;
-using namespace IW4MS;
+using namespace GAME;
 
 namespace map_ents
 {
-    void JsonDumperIW4MS::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetMapEnts::Type>& asset)
+    void CLASS_NAME::DumpAsset(AssetDumpingContext& context, const XAssetInfo<AssetMapEnts::Type>& asset)
     {
         const auto assetFile = context.OpenAssetFile(GetTriggersFileNameForAssetName(asset.m_name));
         if (!assetFile)
@@ -25,7 +38,7 @@ namespace map_ents
         jRoot["_version"] = 1;
         jRoot["_game"] = "iw4";
 
-        jRoot["trigger"] = CreateTriggersJsonIW4MS(mapEnts->trigger);
+        jRoot["trigger"] = CREATE_TRIGGERS_JSON(mapEnts->trigger);
 
         jRoot["stages"] = world::Array(mapEnts->stages,
                                        static_cast<size_t>(mapEnts->stageCount),

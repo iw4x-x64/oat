@@ -7,6 +7,7 @@
 #include "Game/IW4/IW4.h"
 #include "Game/IW4/Image/ImageLoaderEmbeddedIW4.h"
 #include "Game/IW4/Image/ImageLoaderExternalIW4.h"
+#include "Game/IW4/Maps/LoaderMapEntsIW4.h"
 #include "Game/IW4/Sound/LoaderLoadedSoundIW4.h"
 #include "Game/IW4/Techset/PixelShaderLoaderIW4.h"
 #include "Game/IW4/Techset/VertexShaderLoaderIW4.h"
@@ -154,7 +155,7 @@ namespace
         collection.AddAssetCreator(world::CreateComWorldLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(world::CreateGameWorldSpLoaderIW4(memory, searchPath, zone));
         collection.AddAssetCreator(world::CreateGameWorldMpLoaderIW4(memory, searchPath));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderMapEnts>(memory));
+        collection.AddAssetCreator(map_ents::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(world::CreateFxWorldLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(world::CreateGfxWorldLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(light_def::CreateLoaderIW4(memory, searchPath));
