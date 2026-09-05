@@ -12,6 +12,7 @@
 #include "Game/IW4/Maps/LoaderMapEntsIW4.h"
 #include "Game/IW4/PhysCollmap/LoaderPhysCollmapIW4.h"
 #include "Game/IW4/Sound/LoaderLoadedSoundIW4.h"
+#include "Game/IW4/Sound/LoaderSoundAliasIW4.h"
 #include "Game/IW4/Techset/PixelShaderLoaderIW4.h"
 #include "Game/IW4/Techset/VertexShaderLoaderIW4.h"
 #include "Game/IW4/Tracer/GdtLoaderTracerIW4.h"
@@ -150,7 +151,7 @@ namespace
         // collection.AddAssetCreator(std::make_unique<AssetLoaderTechset>(memory));
         collection.AddAssetCreator(image::CreateLoaderEmbeddedIW4(memory, searchPath));
         collection.AddAssetCreator(image::CreateLoaderExternalIW4(memory, searchPath));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderSound>(memory));
+        collection.AddAssetCreator(sound::CreateSoundAliasLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(sound_curve::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(sound::CreateLoadedSoundLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(world::CreateClipMapSpLoaderIW4(memory, searchPath));

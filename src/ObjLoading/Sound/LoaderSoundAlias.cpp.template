@@ -1,8 +1,24 @@
-#include "LoaderSoundAliasIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/Sound/LoaderSoundAlias" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderSoundAlias" + GAME + ".h\""
+#set FACTORY_NAME "CreateSoundAliasLoader" + GAME
+
+#if GAME == "IW4MS"
+#define FEATURE_IW4MS
+#endif
+#set FLAGS_HEADER "\"Game/" + GAME + "/Sound/SoundAliasFlags" + GAME + ".h\""
+
+// This file was templated.
+// See LoaderSoundAlias.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "Csv/CsvHeaderRow.h"
 #include "Csv/CsvStream.h"
-#include "Game/IW4MS/Sound/SoundAliasFlagsIW4MS.h"
+#include FLAGS_HEADER
 #include "Sound/SoundAliasCommon.h"
 #include "Utils/Logging/Log.h"
 
@@ -15,7 +31,7 @@
 #include <unordered_map>
 #include <vector>
 
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -381,8 +397,12 @@ namespace
 
             for (auto i = 0u; i < std::extent_v<decltype(LEVEL_COLUMNS)>; i++)
             {
-                auto& speakers = speakerMap->channelMaps[i / 2u].speakers[i % 2u];
-                if (!LoadSpeakerLevels(Value(row, LEVEL_COLUMNS[i]), speakers))
+#ifdef FEATURE_IW4MS
+                auto& levels = speakerMap->channelMaps[i / 2u].speakers[i % 2u];
+#else
+                auto& levels = speakerMap->channelMaps[i / 2u][i % 2u];
+#endif
+                if (!LoadSpeakerLevels(Value(row, LEVEL_COLUMNS[i]), levels))
                     return false;
             }
 
@@ -392,6 +412,7 @@ namespace
             return true;
         }
 
+#ifdef FEATURE_IW4MS
         bool LoadSpeakerLevels(const std::string* value, MSSSpeakerLevels& speakers) const
         {
             if (!value)
@@ -442,18 +463,82 @@ namespace
             if (secondSeparator == std::string_view::npos)
                 return false;
 
-            const auto readUnsigned = [](const std::string_view text, unsigned& out)
-            {
-                const auto result = std::from_chars(text.data(), text.data() + text.size(), out);
-                return result.ec == std::errc() && result.ptr == text.data() + text.size();
-            };
-
             const auto gainText = level.substr(secondSeparator + 1u);
-            const auto gainResult = std::from_chars(gainText.data(), gainText.data() + gainText.size(), gain);
 
-            return readUnsigned(level.substr(0u, firstSeparator), channel)
-                   && readUnsigned(level.substr(firstSeparator + 1u, secondSeparator - firstSeparator - 1u), speaker) && gainResult.ec == std::errc()
-                   && gainResult.ptr == gainText.data() + gainText.size();
+            return ReadUnsigned(level.substr(0u, firstSeparator), channel)
+                   && ReadUnsigned(level.substr(firstSeparator + 1u, secondSeparator - firstSeparator - 1u), speaker) && ReadFloat(gainText, gain);
+        }
+#else
+        bool LoadSpeakerLevels(const std::string* value, MSSChannelMap& channelMap) const
+        {
+            channelMap = {};
+
+            if (!value)
+                return true;
+
+            for (size_t offset = 0u; offset < value->size();)
+            {
+                const auto end = std::min(value->find(' ', offset), value->size());
+
+                if (static_cast<size_t>(channelMap.speakerCount) >= std::extent_v<decltype(channelMap.speakers)>)
+                {
+                    con::error("Too many speakers in speaker level \"{}\" of sound alias", *value);
+                    return false;
+                }
+
+                if (!ParseLevel(std::string_view(*value).substr(offset, end - offset), channelMap.speakers[channelMap.speakerCount]))
+                {
+                    con::error("Could not read speaker level \"{}\" of sound alias", *value);
+                    return false;
+                }
+
+                channelMap.speakerCount++;
+                offset = end + 1u;
+            }
+
+            return true;
+        }
+
+        static bool ParseLevel(const std::string_view level, MSSSpeakerLevels& speakers)
+        {
+            speakers = {};
+
+            auto separator = level.find(':');
+
+            unsigned speaker;
+            if (!ReadUnsigned(level.substr(0u, std::min(separator, level.size())), speaker))
+                return false;
+            speakers.speaker = static_cast<int>(speaker);
+
+            while (separator != std::string_view::npos)
+            {
+                const auto next = level.find(':', separator + 1u);
+                const auto levelText = level.substr(separator + 1u, next != std::string_view::npos ? next - separator - 1u : std::string_view::npos);
+
+                if (static_cast<size_t>(speakers.numLevels) >= std::extent_v<decltype(speakers.levels)>)
+                    return false;
+
+                if (!ReadFloat(levelText, speakers.levels[speakers.numLevels]))
+                    return false;
+
+                speakers.numLevels++;
+                separator = next;
+            }
+
+            return true;
+        }
+#endif
+
+        static bool ReadUnsigned(const std::string_view text, unsigned& out)
+        {
+            const auto result = std::from_chars(text.data(), text.data() + text.size(), out);
+            return result.ec == std::errc() && result.ptr == text.data() + text.size();
+        }
+
+        static bool ReadFloat(const std::string_view text, float& out)
+        {
+            const auto result = std::from_chars(text.data(), text.data() + text.size(), out);
+            return result.ec == std::errc() && result.ptr == text.data() + text.size();
         }
 
         MemoryManager& m_memory;
@@ -501,7 +586,7 @@ namespace
 
 namespace sound
 {
-    std::unique_ptr<AssetCreator<AssetSound>> CreateSoundAliasLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetSound>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<SoundLoader>(memory, searchPath);
     }

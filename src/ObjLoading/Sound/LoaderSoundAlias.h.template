@@ -1,0 +1,25 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/Sound/LoaderSoundAlias" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set FACTORY_NAME "CreateSoundAliasLoader" + GAME
+#set FLAGS_HEADER "\"Game/" + GAME + "/Sound/SoundAliasFlags" + GAME + ".h\""
+
+// This file was templated.
+// See LoaderSoundAlias.h.template.
+// Do not modify, changes will be lost.
+
+#pragma once
+
+#include "Asset/IAssetCreator.h"
+#include GAME_HEADER
+#include "SearchPath/ISearchPath.h"
+#include "Utils/MemoryManager.h"
+
+#include <memory>
+
+namespace sound
+{
+    std::unique_ptr<AssetCreator<GAME::AssetSound>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath);
+} // namespace sound

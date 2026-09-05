@@ -52,7 +52,7 @@ using `Linker`):
 | MaterialVertexDeclaration | ✅               | ✅               | Dumped as JSON. No source format exists for it.                              |
 | MaterialTechniqueSet      | ✅               | ✅               |                                                                              |
 | GfxImage                  | ✅               | ✅               | Includes the wavelet formats.                                                |
-| snd_alias_list_t          | ✅               | ❌               | Dumped as CSV. Some `flags` bits are still unidentified.                     |
+| snd_alias_list_t          | ✅               | ✅               | CSV. Some `flags` bits are still unidentified.                               |
 | SndCurve                  | ✅               | ✅               |                                                                              |
 | LoadedSound               | ✅               | ✅               |                                                                              |
 | clipMap_t                 | ✅               | ✅               | JSON. Compiled map output: a `.map` compiles into it and cannot be recovered.|
