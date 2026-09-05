@@ -34,7 +34,8 @@ namespace
               m_memory(memory),
               m_context(context),
               m_registration(registration),
-              m_type_name(typeName)
+              m_type_name(typeName),
+              m_shared(memory)
         {
         }
 
@@ -154,8 +155,7 @@ namespace
                                                            jMaterials,
                                                            [this](const json& jMaterial, ClipMaterial& material)
                                                            {
-                                                               const auto& name = jMaterial.at("name").get_ref<const std::string&>();
-                                                               material.name = !name.empty() ? m_memory.Dup(name.c_str()) : nullptr;
+                                                               material.name = m_shared.String(jMaterial.at("name").get_ref<const std::string&>());
 
                                                                jMaterial.at("surfaceFlags").get_to(material.surfaceFlags);
                                                                jMaterial.at("contents").get_to(material.contents);
@@ -500,6 +500,7 @@ namespace
         AssetCreationContext& m_context;
         GenericAssetRegistration& m_registration;
         const char* m_type_name;
+        mutable world::SharedAllocations m_shared;
     };
 
     template<typename AssetType> class ClipMapLoader final : public AssetCreator<AssetType>

@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 
 namespace world
 {
@@ -15,6 +16,34 @@ namespace world
     {
     public:
         using std::runtime_error::runtime_error;
+    };
+
+    class SharedAllocations
+    {
+    public:
+        explicit SharedAllocations(MemoryManager& memory)
+            : m_memory(memory)
+        {
+        }
+
+        [[nodiscard]] const char* String(const std::string& value)
+        {
+            if (value.empty())
+                return nullptr;
+
+            const auto existing = m_strings.find(value);
+            if (existing != m_strings.end())
+                return existing->second;
+
+            const auto* duplicated = m_memory.Dup(value.c_str());
+            m_strings.emplace(value, duplicated);
+
+            return duplicated;
+        }
+
+    private:
+        MemoryManager& m_memory;
+        std::unordered_map<std::string, const char*> m_strings;
     };
 
     template<size_t Size> void Vec(const nlohmann::json& jVec, float (&v)[Size])

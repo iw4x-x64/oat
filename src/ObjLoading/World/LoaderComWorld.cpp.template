@@ -29,7 +29,8 @@ namespace
     public:
         JsonLoader(std::istream& stream, MemoryManager& memory)
             : m_stream(stream),
-              m_memory(memory)
+              m_memory(memory),
+              m_shared(memory)
         {
         }
 
@@ -100,12 +101,12 @@ namespace
             jLight.at("rotationLimit").get_to(light.rotationLimit);
             jLight.at("translationLimit").get_to(light.translationLimit);
 
-            const auto& defName = jLight.at("defName").get_ref<const std::string&>();
-            light.defName = !defName.empty() ? m_memory.Dup(defName.c_str()) : nullptr;
+            light.defName = m_shared.String(jLight.at("defName").get_ref<const std::string&>());
         }
 
         std::istream& m_stream;
         MemoryManager& m_memory;
+        mutable world::SharedAllocations m_shared;
     };
 
     class ComWorldLoader final : public AssetCreator<AssetComWorld>
