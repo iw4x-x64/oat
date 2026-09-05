@@ -1,4 +1,16 @@
-#include "LoaderGameWorldIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/World/LoaderGameWorld" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderGameWorld" + GAME + ".h\""
+#set FACTORY_SP_NAME "CreateGameWorldSpLoader" + GAME
+#set FACTORY_MP_NAME "CreateGameWorldMpLoader" + GAME
+
+// This file was templated.
+// See LoaderGameWorld.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "Utils/Logging/Log.h"
 #include "World/WorldCommon.h"
@@ -9,7 +21,7 @@
 #include <nlohmann/json.hpp>
 
 using namespace nlohmann;
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -428,12 +440,12 @@ namespace
 
 namespace world
 {
-    std::unique_ptr<AssetCreator<AssetGameWorldSp>> CreateGameWorldSpLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath, Zone& zone)
+    std::unique_ptr<AssetCreator<AssetGameWorldSp>> FACTORY_SP_NAME(MemoryManager& memory, ISearchPath& searchPath, Zone& zone)
     {
         return std::make_unique<GameWorldSpLoader>(memory, searchPath, zone);
     }
 
-    std::unique_ptr<AssetCreator<AssetGameWorldMp>> CreateGameWorldMpLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetGameWorldMp>> FACTORY_MP_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<GameWorldMpLoader>(memory, searchPath);
     }

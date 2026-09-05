@@ -16,6 +16,7 @@
 #include "Game/IW4/Weapon/AccuracyGraphLoaderIW4.h"
 #include "Game/IW4/World/LoaderComWorldIW4.h"
 #include "Game/IW4/World/LoaderFxWorldIW4.h"
+#include "Game/IW4/World/LoaderGameWorldIW4.h"
 #include "Game/IW4/XAnim/XAnimLoaderIW4.h"
 #include "Game/IW4/XModel/LoaderXModelIW4.h"
 #include "Leaderboard/LoaderLeaderboardIW4.h"
@@ -147,8 +148,8 @@ namespace
         // collection.AddAssetCreator(std::make_unique<AssetLoaderLoadedSound>(memory));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderClipMap>(memory));
         collection.AddAssetCreator(world::CreateComWorldLoaderIW4(memory, searchPath));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderGameWorldSp>(memory));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderGameWorldMp>(memory));
+        collection.AddAssetCreator(world::CreateGameWorldSpLoaderIW4(memory, searchPath, zone));
+        collection.AddAssetCreator(world::CreateGameWorldMpLoaderIW4(memory, searchPath));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderMapEnts>(memory));
         collection.AddAssetCreator(world::CreateFxWorldLoaderIW4(memory, searchPath));
         // collection.AddAssetCreator(std::make_unique<AssetLoaderGfxWorld>(memory));

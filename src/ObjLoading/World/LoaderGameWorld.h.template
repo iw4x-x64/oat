@@ -1,0 +1,27 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/World/LoaderGameWorld" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set FACTORY_SP_NAME "CreateGameWorldSpLoader" + GAME
+#set FACTORY_MP_NAME "CreateGameWorldMpLoader" + GAME
+
+// This file was templated.
+// See LoaderGameWorld.h.template.
+// Do not modify, changes will be lost.
+
+#pragma once
+
+#include "Asset/IAssetCreator.h"
+#include GAME_HEADER
+#include "SearchPath/ISearchPath.h"
+#include "Utils/MemoryManager.h"
+#include "Zone/Zone.h"
+
+#include <memory>
+
+namespace world
+{
+    std::unique_ptr<AssetCreator<GAME::AssetGameWorldSp>> FACTORY_SP_NAME(MemoryManager& memory, ISearchPath& searchPath, Zone& zone);
+    std::unique_ptr<AssetCreator<GAME::AssetGameWorldMp>> FACTORY_MP_NAME(MemoryManager& memory, ISearchPath& searchPath);
+} // namespace world

@@ -57,8 +57,8 @@ using `Linker`):
 | LoadedSound               | ✅               | ❌               |                                                                              |
 | clipMap_t                 | ✅               | ❌               | JSON. Compiled map output: a `.map` compiles into it and cannot be recovered.|
 | ComWorld                  | ✅               | ✅               | JSON, as above.                                                              |
-| GameWorldSp               | ✅               | ❌               | JSON, as above.                                                              |
-| GameWorldMp               | ✅               | ❌               | JSON, as above.                                                              |
+| GameWorldSp               | ✅               | ✅               | JSON, as above.                                                              |
+| GameWorldMp               | ✅               | ✅               | JSON, as above.                                                              |
 | MapEnts                   | ⁉️              | ❌               | Entity string can be exported. Binary data currently not.                    |
 | FxWorld                   | ✅               | ✅               | JSON, as above.                                                              |
 | GfxWorld                  | ✅               | ❌               | JSON, as above.                                                              |
