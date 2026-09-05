@@ -100,7 +100,6 @@ namespace
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetPhysPreset>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetPhysCollMap>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetXAnim>>(zone));
-        // collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetXModelSurfs>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetXModel>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetMaterial>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetPixelShader>>(zone));
@@ -111,7 +110,6 @@ namespace
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetSound>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetSoundCurve>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetLoadedSound>>(zone));
-        // collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetClipMapSp>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetClipMapMp>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetComWorld>>(zone));
         collection.AddAssetCreator(std::make_unique<GlobalAssetPoolsLoader<AssetGameWorldSp>>(zone));
@@ -148,7 +146,6 @@ namespace
         collection.AddAssetCreator(material::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(techset::CreateVertexShaderLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(techset::CreatePixelShaderLoaderIW4(memory, searchPath));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderTechset>(memory));
         collection.AddAssetCreator(image::CreateLoaderEmbeddedIW4(memory, searchPath));
         collection.AddAssetCreator(image::CreateLoaderExternalIW4(memory, searchPath));
         collection.AddAssetCreator(sound::CreateSoundAliasLoaderIW4(memory, searchPath));
@@ -165,7 +162,6 @@ namespace
         collection.AddAssetCreator(light_def::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(font::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(menu::CreateMenuListLoaderIW4(memory, searchPath));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderMenu>(memory));
         collection.AddAssetCreator(localize::CreateLoaderIW4(memory, searchPath, zone));
         collection.AddAssetCreator(weapon::CreateRawLoaderIW4(memory, searchPath, zone));
         collection.AddAssetCreator(weapon::CreateGdtLoaderIW4(memory, searchPath, gdt, zone));

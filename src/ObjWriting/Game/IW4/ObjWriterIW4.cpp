@@ -71,27 +71,17 @@ void ObjWriter::RegisterAssetDumpers(AssetDumpingContext& context)
 #endif
         ));
     RegisterAssetDumper(std::make_unique<image::DumperIW4>());
-    // REGISTER_DUMPER(AssetDumpersnd_alias_list_t)
     RegisterAssetDumper(std::make_unique<sound::CsvDumperIW4>());
     RegisterAssetDumper(std::make_unique<sound_curve::DumperIW4>());
     RegisterAssetDumper(std::make_unique<sound::LoadedSoundDumperIW4>());
-    // REGISTER_DUMPER(AssetDumperClipMap)
-    // REGISTER_DUMPER(AssetDumperComWorld)
-    // REGISTER_DUMPER(AssetDumperGameWorldSp)
-    // REGISTER_DUMPER(AssetDumperGameWorldMp)
     RegisterAssetDumper(std::make_unique<map_ents::DumperIW4>());
     RegisterAssetDumper(std::make_unique<map_ents::JsonDumperIW4>());
-    // REGISTER_DUMPER(AssetDumperFxWorld)
-    // REGISTER_DUMPER(AssetDumperGfxWorld)
     RegisterAssetDumper(std::make_unique<light_def::DumperIW4>());
     RegisterAssetDumper(std::make_unique<font::JsonDumperIW4>());
     RegisterAssetDumper(std::make_unique<menu::MenuListDumperIW4>());
     RegisterAssetDumper(std::make_unique<menu::MenuDumperIW4>());
     RegisterAssetDumper(std::make_unique<localize::DumperIW4>());
     RegisterAssetDumper(std::make_unique<weapon::DumperIW4>());
-    // REGISTER_DUMPER(AssetDumperSndDriverGlobals)
-    // REGISTER_DUMPER(AssetDumperFxEffectDef)
-    // REGISTER_DUMPER(AssetDumperFxImpactTable)
     RegisterAssetDumper(std::make_unique<raw_file::DumperIW4>());
     RegisterAssetDumper(std::make_unique<string_table::DumperIW4>());
     RegisterAssetDumper(std::make_unique<leaderboard::JsonDumperIW4>());
