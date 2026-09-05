@@ -43,7 +43,7 @@ using `Linker`):
 | Asset Type                | Dumping Support | Loading Support | Notes                                                                        |
 |---------------------------|-----------------|-----------------|------------------------------------------------------------------------------|
 | PhysPreset                | ✅               | ✅               |                                                                              |
-| PhysCollmap               | ✅               | ❌               |                                                                              |
+| PhysCollmap               | ✅               | ✅               | Shape as a `.map`, collision brushes as json beside it.                      |
 | XAnimParts                | ✅               | ✅               |                                                                              |
 | XModel                    | ✅               | ✅               | Model data can be exported to `XMODEL_EXPORT/XMODEL_BIN`, `OBJ`, `GLB/GLTF`. |
 | Material                  | ✅               | ✅               |                                                                              |

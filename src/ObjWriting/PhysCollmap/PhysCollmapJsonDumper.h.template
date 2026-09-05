@@ -1,0 +1,24 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/PhysCollmap/PhysCollmapJsonDumper" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set CLASS_NAME "JsonDumper" + GAME
+
+// This file was templated.
+// See PhysCollmapJsonDumper.h.template.
+// Do not modify, changes will be lost.
+
+#pragma once
+
+#include "Dumping/AbstractAssetDumper.h"
+#include GAME_HEADER
+
+namespace phys_collmap
+{
+    class CLASS_NAME final : public AbstractAssetDumper<GAME::AssetPhysCollMap>
+    {
+    protected:
+        void DumpAsset(AssetDumpingContext& context, const XAssetInfo<GAME::AssetPhysCollMap::Type>& asset) override;
+    };
+} // namespace phys_collmap

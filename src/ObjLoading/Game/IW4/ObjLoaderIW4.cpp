@@ -8,6 +8,7 @@
 #include "Game/IW4/Image/ImageLoaderEmbeddedIW4.h"
 #include "Game/IW4/Image/ImageLoaderExternalIW4.h"
 #include "Game/IW4/Maps/LoaderMapEntsIW4.h"
+#include "Game/IW4/PhysCollmap/LoaderPhysCollmapIW4.h"
 #include "Game/IW4/Sound/LoaderLoadedSoundIW4.h"
 #include "Game/IW4/Techset/PixelShaderLoaderIW4.h"
 #include "Game/IW4/Techset/VertexShaderLoaderIW4.h"
@@ -138,7 +139,7 @@ namespace
 
         collection.AddAssetCreator(phys_preset::CreateRawLoaderIW4(memory, searchPath, zone));
         collection.AddAssetCreator(phys_preset::CreateGdtLoaderIW4(memory, gdt, zone));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderPhysCollMap>(memory));
+        collection.AddAssetCreator(phys_collmap::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(xanim::CreateLoaderIW4(memory, searchPath, zone));
         collection.AddAssetCreator(xmodel::CreateLoaderIW4(memory, searchPath, zone));
         collection.AddAssetCreator(material::CreateLoaderIW4(memory, searchPath));

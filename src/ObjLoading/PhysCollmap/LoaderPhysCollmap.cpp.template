@@ -1,4 +1,15 @@
-#include "LoaderPhysCollmapIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/PhysCollmap/LoaderPhysCollmap" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderPhysCollmap" + GAME + ".h\""
+#set FACTORY_NAME "CreateLoader" + GAME
+
+// This file was templated.
+// See LoaderPhysCollmap.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "PhysCollmap/PhysCollmapCommon.h"
 #include "Utils/Logging/Log.h"
@@ -9,7 +20,7 @@
 #include <nlohmann/json.hpp>
 
 using namespace nlohmann;
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -199,7 +210,7 @@ namespace
 
 namespace phys_collmap
 {
-    std::unique_ptr<AssetCreator<AssetPhysCollMap>> CreateLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetPhysCollMap>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<PhysCollmapLoader>(memory, searchPath);
     }

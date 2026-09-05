@@ -7,6 +7,7 @@
 #include "Game/IW4/Maps/MapEntsDumperIW4.h"
 #include "Game/IW4/Maps/MapEntsJsonDumperIW4.h"
 #include "Game/IW4/Material/MaterialJsonDumperIW4.h"
+#include "Game/IW4/PhysCollmap/PhysCollmapJsonDumperIW4.h"
 #include "Game/IW4/Sound/SndAliasListCsvDumperIW4.h"
 #include "Game/IW4/Techset/PixelShaderDumperIW4.h"
 #include "Game/IW4/Techset/TechsetDumperIW4.h"
@@ -53,6 +54,7 @@ void ObjWriter::RegisterAssetDumpers(AssetDumpingContext& context)
     RegisterAssetDumper(std::make_unique<world::ClipMapMpJsonDumperIW4>());
     RegisterAssetDumper(std::make_unique<world::GfxWorldJsonDumperIW4>());
     RegisterAssetDumper(std::make_unique<phys_collmap::DumperIW4>());
+    RegisterAssetDumper(std::make_unique<phys_collmap::JsonDumperIW4>());
     RegisterAssetDumper(std::make_unique<xanim::DumperIW4>());
     RegisterAssetDumper(std::make_unique<xmodel::DumperIW4>());
     RegisterAssetDumper(std::make_unique<material::JsonDumperIW4>());
