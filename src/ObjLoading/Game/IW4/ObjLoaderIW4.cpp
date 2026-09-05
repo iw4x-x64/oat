@@ -3,6 +3,7 @@
 #include "Asset/GlobalAssetPoolsLoader.h"
 #include "Game/IW4/AssetMarkerIW4.h"
 #include "Game/IW4/FX/LoaderEfxIW4.h"
+#include "Game/IW4/FX/LoaderImpactFxIW4.h"
 #include "Game/IW4/Font/FontLoaderIW4.h"
 #include "Game/IW4/GameIW4.h"
 #include "Game/IW4/IW4.h"
@@ -168,7 +169,7 @@ namespace
         collection.AddAssetCreator(weapon::CreateRawLoaderIW4(memory, searchPath, zone));
         collection.AddAssetCreator(weapon::CreateGdtLoaderIW4(memory, searchPath, gdt, zone));
         collection.AddAssetCreator(fx::CreateEfxLoaderIW4(memory, searchPath));
-        // collection.AddAssetCreator(std::make_unique<AssetLoaderImpactFx>(memory));
+        collection.AddAssetCreator(fx::CreateImpactFxLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(raw_file::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(string_table::CreateLoaderIW4(memory, searchPath));
         collection.AddAssetCreator(leaderboard::CreateLoaderIW4(memory, searchPath));

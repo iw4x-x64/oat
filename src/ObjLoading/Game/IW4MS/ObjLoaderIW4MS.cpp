@@ -4,9 +4,9 @@
 
 #ifdef ARCH_x64
 #include "Asset/GlobalAssetPoolsLoader.h"
-#include "FX/LoaderImpactFxIW4MS.h"
 #include "Game/IW4MS/AssetMarkerIW4MS.h"
 #include "Game/IW4MS/FX/LoaderEfxIW4MS.h"
+#include "Game/IW4MS/FX/LoaderImpactFxIW4MS.h"
 #include "Game/IW4MS/Font/FontLoaderIW4MS.h"
 #include "Game/IW4MS/GameIW4MS.h"
 #include "Game/IW4MS/IW4MS.h"

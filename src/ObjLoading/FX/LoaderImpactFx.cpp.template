@@ -1,7 +1,19 @@
-#include "LoaderImpactFxIW4MS.h"
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/FX/LoaderImpactFx" + GAME + ".cpp"
+
+#set LOADER_HEADER "\"LoaderImpactFx" + GAME + ".h\""
+#set FACTORY_NAME "CreateImpactFxLoader" + GAME
+#set MATERIAL_CONSTANTS_HEADER "\"Game/" + GAME + "/MaterialConstants" + GAME + ".h\""
+
+// This file was templated.
+// See LoaderImpactFx.cpp.template.
+// Do not modify, changes will be lost.
+
+#include LOADER_HEADER
 
 #include "FX/FxCommon.h"
-#include "Game/IW4MS/MaterialConstantsIW4MS.h"
+#include MATERIAL_CONSTANTS_HEADER
 #include "Utils/Logging/Log.h"
 
 #include <format>
@@ -10,7 +22,7 @@
 #include <string>
 
 using namespace nlohmann;
-using namespace IW4MS;
+using namespace GAME;
 
 namespace
 {
@@ -208,7 +220,7 @@ namespace
 
 namespace fx
 {
-    std::unique_ptr<AssetCreator<AssetImpactFx>> CreateImpactFxLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    std::unique_ptr<AssetCreator<AssetImpactFx>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<ImpactFxLoader>(memory, searchPath);
     }

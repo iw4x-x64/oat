@@ -1,0 +1,25 @@
+#options GAME (IW4, IW4MS)
+
+#filename "Game/" + GAME + "/FX/LoaderImpactFx" + GAME + ".h"
+
+#set GAME_HEADER "\"Game/" + GAME + "/" + GAME + ".h\""
+#set FACTORY_NAME "CreateImpactFxLoader" + GAME
+#set MATERIAL_CONSTANTS_HEADER "\"Game/" + GAME + "/MaterialConstants" + GAME + ".h\""
+
+// This file was templated.
+// See LoaderImpactFx.h.template.
+// Do not modify, changes will be lost.
+
+#pragma once
+
+#include "Asset/IAssetCreator.h"
+#include GAME_HEADER
+#include "SearchPath/ISearchPath.h"
+#include "Utils/MemoryManager.h"
+
+#include <memory>
+
+namespace fx
+{
+    std::unique_ptr<AssetCreator<GAME::AssetImpactFx>> FACTORY_NAME(MemoryManager& memory, ISearchPath& searchPath);
+} // namespace fx
