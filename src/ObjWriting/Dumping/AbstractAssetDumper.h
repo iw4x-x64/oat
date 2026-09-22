@@ -32,8 +32,15 @@ public:
                 continue;
             }
 
+            const auto failedFilesBefore = context.FailedFileCount();
+            const auto skippedAssetsBefore = context.SkippedAssetCount();
             DumpAsset(context, *assetInfo);
-            con::info("Dumped {} \"{}\"", assetTypeName, assetInfo->m_name);
+
+            if (context.FailedFileCount() != failedFilesBefore)
+                con::warn("Did not dump {} \"{}\"", assetTypeName, assetInfo->m_name);
+            else if (context.SkippedAssetCount() == skippedAssetsBefore)
+                con::info("Dumped {} \"{}\"", assetTypeName, assetInfo->m_name);
+
             context.IncrementProgress();
         }
     }

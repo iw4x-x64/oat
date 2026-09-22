@@ -170,9 +170,17 @@ namespace image
     std::unique_ptr<Texture> CLASS_NAME::Convert(const XAssetInfoGeneric& assetInfo, ISearchPath& searchPath)
     {
         const auto& image = *reinterpret_cast<const XAssetInfo<AssetImage::Type>*>(&assetInfo)->Asset();
-        
+
         if (image.texture.loadDef && image.texture.loadDef->resourceSize > 0)
             return LoadImageFromLoadDef(image);
+
+        if (image.category >= IMG_CATEGORY_FIRST_UNMANAGED)
+        {
+            con::debug("Not dumping image \"{}\": category {} is filled by the engine at runtime and holds no stored data",
+                       image.name,
+                       static_cast<unsigned>(image.category));
+            return nullptr;
+        }
 
         return LoadImageFromIwi(image, searchPath);
     }

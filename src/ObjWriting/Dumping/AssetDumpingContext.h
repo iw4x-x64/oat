@@ -23,6 +23,12 @@ public:
 
     [[nodiscard]] std::unique_ptr<std::ostream> OpenAssetFile(const std::string& fileName) const;
 
+    [[nodiscard]] size_t FailedFileCount() const;
+
+    void MarkAssetSkipped() const;
+
+    [[nodiscard]] size_t SkippedAssetCount() const;
+
     void IncrementProgress();
     void SetTotalProgress(size_t value);
     [[nodiscard]] bool ShouldTrackProgress() const;
@@ -48,6 +54,12 @@ public:
     IOutputPath& m_output_path;
     ISearchPath& m_obj_search_path;
     std::unique_ptr<GdtOutputStream> m_gdt;
+
+private:
+    mutable size_t m_failed_file_count{0uz};
+    mutable size_t m_skipped_asset_count{0uz};
+
+public:
 
 private:
     std::unordered_map<std::type_index, std::unique_ptr<IZoneAssetDumperState>> m_zone_asset_dumper_states;

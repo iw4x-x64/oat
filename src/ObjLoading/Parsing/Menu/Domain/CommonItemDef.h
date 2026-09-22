@@ -108,6 +108,8 @@ namespace menu
         bool m_horizontal_scroll = false;
         int m_type = 0;
         CommonItemFeatureType m_feature_type = CommonItemFeatureType::NONE;
+
+        bool m_type_explicit = false;
         int m_border = 0;
         double m_border_size = 0;
         int m_owner_draw = 0;

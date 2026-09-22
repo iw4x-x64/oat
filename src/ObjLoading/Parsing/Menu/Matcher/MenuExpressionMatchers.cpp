@@ -4,6 +4,8 @@
 #include "Game/IW3/MenuConstantsIW3.h"
 #include "Game/IW4/IW4.h"
 #include "Game/IW4/MenuConstantsIW4.h"
+#include "Game/IW4MS/IW4MS.h"
+#include "Game/IW4MS/MenuConstantsIW4MS.h"
 #include "Game/IW5/IW5.h"
 #include "Game/IW5/MenuConstantsIW5.h"
 #include "Game/T4/MenuConstantsT4.h"
@@ -106,6 +108,23 @@ const std::unordered_map<std::string, size_t>& MenuExpressionMatchers::GetBaseFu
         }
 
         return iw4FunctionMap;
+    }
+    if (featureLevel == FeatureLevel::IW4MS)
+    {
+        static std::unordered_map<std::string, size_t> iw4msFunctionMap;
+        static bool iw4msFunctionMapInitialized = false;
+
+        if (!iw4msFunctionMapInitialized)
+        {
+            for (size_t i = IW4MS::expressionFunction_e::EXP_FUNC_DYN_START; i < std::extent_v<decltype(IW4MS::g_expFunctionNames)>; i++)
+            {
+                std::string functionName(IW4MS::g_expFunctionNames[i]);
+                utils::MakeStringLowerCase(functionName);
+                iw4msFunctionMap.emplace(std::make_pair(std::move(functionName), i));
+            }
+        }
+
+        return iw4msFunctionMap;
     }
     if (featureLevel == FeatureLevel::IW5)
     {

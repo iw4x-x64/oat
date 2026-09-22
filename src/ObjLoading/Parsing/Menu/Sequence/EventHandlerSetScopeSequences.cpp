@@ -611,6 +611,23 @@ namespace
             }
         }
 
+        static bool StaticValueMatchesType(const SetLocalVarType type, const SimpleExpressionValue& staticValue)
+        {
+            switch (type)
+            {
+            case SetLocalVarType::BOOL:
+            case SetLocalVarType::INT:
+                return staticValue.m_type == SimpleExpressionValue::Type::INT;
+
+            case SetLocalVarType::FLOAT:
+                return staticValue.m_type == SimpleExpressionValue::Type::DOUBLE || staticValue.m_type == SimpleExpressionValue::Type::INT;
+
+            case SetLocalVarType::STRING:
+            default:
+                return true;
+            }
+        }
+
         static void CheckStaticValueType(const TokenPos& pos, const SetLocalVarType type, const SimpleExpressionValue& staticValue)
         {
             switch (type)
@@ -695,7 +712,7 @@ namespace
 
             if (expression)
             {
-                if (expression->IsStatic())
+                if (expression->IsStatic() && StaticValueMatchesType(typeTag, expression->EvaluateStatic()))
                     EmitStaticSetLocalVar(state, varNameToken.GetPos(), typeTag, varName, std::move(expression));
                 else
                     EmitDynamicSetLocalVar(state, typeTag, varName, std::move(expression));
@@ -1226,7 +1243,7 @@ void EventHandlerSetScopeSequences::AddSequences(const FeatureLevel featureLevel
             create.ScriptKeyword("clearClientMatchData"),
         }));
 
-        if (featureLevel == FeatureLevel::IW4)
+        if (UsesIw4MenuGrammar(featureLevel))
         {
             AddSequence(SequenceGenericScriptStatement::Create({
                 create.ScriptKeyword("setFocus"),

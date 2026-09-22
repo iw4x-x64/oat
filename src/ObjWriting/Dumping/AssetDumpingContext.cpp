@@ -20,7 +20,26 @@ AssetDumpingContext::AssetDumpingContext(const Zone& zone,
 
 std::unique_ptr<std::ostream> AssetDumpingContext::OpenAssetFile(const std::string& fileName) const
 {
-    return m_output_path.Open(fileName);
+    auto stream = m_output_path.Open(fileName);
+    if (!stream)
+        m_failed_file_count++;
+
+    return stream;
+}
+
+size_t AssetDumpingContext::FailedFileCount() const
+{
+    return m_failed_file_count;
+}
+
+void AssetDumpingContext::MarkAssetSkipped() const
+{
+    m_skipped_asset_count++;
+}
+
+size_t AssetDumpingContext::SkippedAssetCount() const
+{
+    return m_skipped_asset_count;
 }
 
 void AssetDumpingContext::IncrementProgress()

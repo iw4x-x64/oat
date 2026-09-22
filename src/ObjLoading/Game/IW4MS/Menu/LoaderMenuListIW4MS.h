@@ -10,4 +10,6 @@
 namespace menu
 {
     std::unique_ptr<AssetCreator<IW4MS::AssetMenuList>> CreateMenuListLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath);
+
+    std::unique_ptr<AssetCreator<IW4MS::AssetMenu>> CreateMenuLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath);
 } // namespace menu

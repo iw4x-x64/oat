@@ -84,6 +84,7 @@ namespace
             {
             case FeatureLevel::IW3:
             case FeatureLevel::IW4:
+            case FeatureLevel::IW4MS:
             case FeatureLevel::T4:
                 if (static_cast<unsigned>(type) >= std::extent_v<decltype(IW3_IW4_T4_FEATURE_TYPE_BY_TYPE)>)
                     throw ParsingException(pos, "Invalid item type");
@@ -102,11 +103,22 @@ namespace
         {
             const auto featureType = GetFeatureTypeForItemType(featureLevel, pos, type);
 
-            if (item.m_feature_type != CommonItemFeatureType::NONE)
+            if (item.m_type_explicit && item.m_feature_type != CommonItemFeatureType::NONE)
                 throw ParsingException(pos, "Item type has already been set");
 
+            const auto hadDefaultEditField = !item.m_type_explicit && item.m_feature_type == CommonItemFeatureType::EDIT_FIELD;
+
             item.m_type = type;
+            item.m_type_explicit = true;
             item.m_feature_type = featureType;
+
+            if (hadDefaultEditField)
+            {
+                if (item.m_feature_type != CommonItemFeatureType::EDIT_FIELD)
+                    throw ParsingException(pos, "Item type must be declared before any declaration specific to it");
+
+                return;
+            }
 
             switch (item.m_feature_type)
             {
@@ -136,7 +148,7 @@ namespace
         static void EnsureHasEditFieldFeatures(CommonItemDef& item, const FeatureLevel featureLevel, const TokenPos& pos)
         {
             // Due to default item types, edit field capabilities might not have been initialized
-            if (item.m_feature_type == CommonItemFeatureType::NONE
+            if (!item.m_type_explicit && item.m_feature_type == CommonItemFeatureType::NONE
                 && GetFeatureTypeForItemType(featureLevel, pos, item.m_type) == CommonItemFeatureType::EDIT_FIELD)
             {
                 item.m_feature_type = CommonItemFeatureType::EDIT_FIELD;
@@ -488,7 +500,7 @@ namespace
         void ProcessMatch(MenuFileParserState* state, SequenceResult<SimpleParserValue>& result) const override
         {
             assert(state->m_current_item);
-            assert(state->m_feature_level == FeatureLevel::IW3 || state->m_feature_level == FeatureLevel::IW4 || state->m_feature_level == FeatureLevel::IW5
+            assert(UsesIw4MenuGrammar(state->m_feature_level) || state->m_feature_level == FeatureLevel::IW3 || state->m_feature_level == FeatureLevel::IW5
                    || state->m_feature_level == FeatureLevel::T4);
 
             const auto& firstToken = result.NextCapture(CAPTURE_FIRST_TOKEN);
@@ -502,7 +514,7 @@ namespace
             size_t baseColumnCount;
             const char* syntax;
             bool hasHeightValues;
-            if (state->m_feature_level == FeatureLevel::IW3 || state->m_feature_level == FeatureLevel::IW4 || state->m_feature_level == FeatureLevel::T4)
+            if (UsesIw4MenuGrammar(state->m_feature_level) || state->m_feature_level == FeatureLevel::IW3 || state->m_feature_level == FeatureLevel::T4)
             {
                 baseColumnCount = BASE_COLUMN_COUNT_IW3_IW4_T4;
                 syntax = SYNTAX_IW3_IW4_T4;
