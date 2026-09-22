@@ -129,6 +129,7 @@ namespace
         collection.AddAssetCreator(addon_map_ents::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(light_def::CreateLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(menu::CreateMenuListLoaderIW4MS(memory, searchPath));
+        collection.AddAssetCreator(menu::CreateMenuLoaderIW4MS(memory, searchPath));
         collection.AddAssetCreator(localize::CreateLoaderIW4MS(memory, searchPath, zone));
         collection.AddAssetCreator(weapon::CreateRawLoaderIW4MS(memory, searchPath, zone));
         collection.AddAssetCreator(weapon::CreateGdtLoaderIW4MS(memory, searchPath, gdt, zone));

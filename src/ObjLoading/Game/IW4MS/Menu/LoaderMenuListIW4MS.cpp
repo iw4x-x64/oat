@@ -15,6 +15,82 @@ using namespace IW4MS;
 
 namespace
 {
+    std::unique_ptr<menu::ParsingResult>
+        ParseMenuFile(std::istream& stream, const std::string& menuFileName, const menu::MenuAssetZoneState& zoneState, ISearchPath& searchPath)
+    {
+        menu::MenuFileReader reader(stream,
+                                    menuFileName,
+                                    menu::FeatureLevel::IW4MS,
+                                    searchPath);
+
+        reader.IncludeZoneState(zoneState);
+        reader.SetPermissiveMode(ObjLoading::Configuration.MenuPermissiveParsing);
+
+        return reader.ReadMenuFile();
+    }
+
+    bool ProcessParsedResults(const std::string& fileName,
+                              AssetCreationContext& context,
+                              menu::ParsingResult& parsingResult,
+                              menu::MenuAssetZoneState& zoneState,
+                              MenuConversionZoneState& conversionState,
+                              MemoryManager& memory,
+                              ISearchPath& searchPath,
+                              std::vector<menuDef_t*>& menus,
+                              std::vector<XAssetInfo<menuDef_t>*>& addedMenus)
+    {
+        const auto menuCount = parsingResult.m_menus.size();
+        const auto functionCount = parsingResult.m_functions.size();
+        const auto menuLoadCount = parsingResult.m_menus_to_load.size();
+        auto totalItemCount = 0uz;
+        for (const auto& menu : parsingResult.m_menus)
+            totalItemCount += menu->m_items.size();
+
+        con::info("Successfully read menu file \"{}\" ({} loads, {} menus, {} functions, {} items)",
+                  fileName,
+                  menuLoadCount,
+                  menuCount,
+                  functionCount,
+                  totalItemCount);
+
+        for (auto& function : parsingResult.m_functions)
+            zoneState.AddFunction(std::move(function));
+
+        std::vector<XAssetInfo<menuDef_t>*> allMenusOfFile;
+        allMenusOfFile.reserve(parsingResult.m_menus.size());
+
+        for (auto& commonMenu : parsingResult.m_menus)
+        {
+            auto converter = IMenuConverter::Create(ObjLoading::Configuration.MenuNoOptimization, searchPath, memory, context);
+
+            auto* menuAsset = memory.Alloc<menuDef_t>();
+            AssetRegistration<AssetMenu> menuRegistration(commonMenu->m_name, menuAsset);
+
+            converter->ConvertMenu(*commonMenu, *menuAsset, menuRegistration);
+            if (menuAsset == nullptr)
+            {
+                con::error("Failed to convert menu file \"{}\"", commonMenu->m_name);
+                return false;
+            }
+
+            menus.emplace_back(menuAsset);
+            auto* menuAssetInfo = context.AddAsset(std::move(menuRegistration));
+
+            if (menuAssetInfo)
+            {
+                allMenusOfFile.emplace_back(menuAssetInfo);
+                addedMenus.emplace_back(menuAssetInfo);
+            }
+
+            zoneState.AddMenu(std::move(commonMenu));
+        }
+
+        // Register this file with all loaded menus
+        conversionState.AddLoadedFile(fileName, std::move(allMenusOfFile));
+
+        return true;
+    }
+
     class MenuListLoader final : public AssetCreator<AssetMenuList>
     {
     public:
@@ -41,10 +117,13 @@ namespace
                 if (!file.IsOpen())
                     return AssetCreationResult::NoAction();
 
-                const auto menuListResult = ParseMenuFile(*file.m_stream, assetName, zoneState);
+                const auto menuListResult = ParseMenuFile(*file.m_stream, assetName, zoneState, m_search_path);
                 if (menuListResult)
                 {
-                    ProcessParsedResults(assetName, context, *menuListResult, zoneState, conversionState, menus, registration);
+                    std::vector<XAssetInfo<menuDef_t>*> addedMenus;
+                    ProcessParsedResults(assetName, context, *menuListResult, zoneState, conversionState, m_memory, m_search_path, menus, addedMenus);
+                    for (auto* menu : addedMenus)
+                        registration.AddDependency(menu);
 
                     for (const auto& menuToLoad : menuListResult->m_menus_to_load)
                         menuLoadQueue.emplace_back(menuToLoad);
@@ -105,10 +184,13 @@ namespace
                 return false;
             }
 
-            const auto menuFileResult = ParseMenuFile(*file.m_stream, menuFilePath, zoneState);
+            const auto menuFileResult = ParseMenuFile(*file.m_stream, menuFilePath, zoneState, m_search_path);
             if (menuFileResult)
             {
-                ProcessParsedResults(menuFilePath, context, *menuFileResult, zoneState, conversionState, menus, registration);
+                std::vector<XAssetInfo<menuDef_t>*> addedMenus;
+                ProcessParsedResults(menuFilePath, context, *menuFileResult, zoneState, conversionState, m_memory, m_search_path, menus, addedMenus);
+                for (auto* menu : addedMenus)
+                    registration.AddDependency(menu);
                 if (!menuFileResult->m_menus_to_load.empty())
                     con::warn("Menu file has menus to load even though it is not a menu list, ignoring: \"{}\"", menuFilePath);
 
@@ -118,69 +200,6 @@ namespace
                 con::error("Could not read menu file \"{}\"", menuFilePath);
 
             return false;
-        }
-
-        bool ProcessParsedResults(const std::string& fileName,
-                                  AssetCreationContext& context,
-                                  menu::ParsingResult& parsingResult,
-                                  menu::MenuAssetZoneState& zoneState,
-                                  MenuConversionZoneState& conversionState,
-                                  std::vector<menuDef_t*>& menus,
-                                  AssetRegistration<AssetMenuList>& registration) const
-        {
-            const auto menuCount = parsingResult.m_menus.size();
-            const auto functionCount = parsingResult.m_functions.size();
-            const auto menuLoadCount = parsingResult.m_menus_to_load.size();
-            auto totalItemCount = 0uz;
-            for (const auto& menu : parsingResult.m_menus)
-                totalItemCount += menu->m_items.size();
-
-            con::info("Successfully read menu file \"{}\" ({} loads, {} menus, {} functions, {} items)",
-                      fileName,
-                      menuLoadCount,
-                      menuCount,
-                      functionCount,
-                      totalItemCount);
-
-            // Add all functions to the zone state to make them available for all menus to be converted
-            for (auto& function : parsingResult.m_functions)
-                zoneState.AddFunction(std::move(function));
-
-            // Prepare a list of all menus of this file
-            std::vector<XAssetInfo<menuDef_t>*> allMenusOfFile;
-            allMenusOfFile.reserve(parsingResult.m_menus.size());
-
-            // Convert all menus and add them as assets
-            for (auto& commonMenu : parsingResult.m_menus)
-            {
-                auto converter = IMenuConverter::Create(ObjLoading::Configuration.MenuNoOptimization, m_search_path, m_memory, context);
-
-                auto* menuAsset = m_memory.Alloc<menuDef_t>();
-                AssetRegistration<AssetMenu> menuRegistration(commonMenu->m_name, menuAsset);
-
-                converter->ConvertMenu(*commonMenu, *menuAsset, menuRegistration);
-                if (menuAsset == nullptr)
-                {
-                    con::error("Failed to convert menu file \"{}\"", commonMenu->m_name);
-                    return false;
-                }
-
-                menus.emplace_back(menuAsset);
-                auto* menuAssetInfo = context.AddAsset(std::move(menuRegistration));
-
-                if (menuAssetInfo)
-                {
-                    allMenusOfFile.emplace_back(menuAssetInfo);
-                    registration.AddDependency(menuAssetInfo);
-                }
-
-                zoneState.AddMenu(std::move(commonMenu));
-            }
-
-            // Register this file with all loaded menus
-            conversionState.AddLoadedFile(fileName, std::move(allMenusOfFile));
-
-            return true;
         }
 
         void CreateMenuListAsset(MenuList& menuList, const std::vector<menuDef_t*>& menus) const
@@ -197,20 +216,59 @@ namespace
                 menuList.menus = nullptr;
         }
 
-        std::unique_ptr<menu::ParsingResult>
-            ParseMenuFile(std::istream& stream, const std::string& menuFileName, const menu::MenuAssetZoneState& zoneState) const
+        MemoryManager& m_memory;
+        ISearchPath& m_search_path;
+    };
+
+    class MenuLoader final : public AssetCreator<AssetMenu>
+    {
+    public:
+        MenuLoader(MemoryManager& memory, ISearchPath& searchPath)
+            : m_memory(memory),
+              m_search_path(searchPath)
         {
-            menu::MenuFileReader reader(stream,
-                                        menuFileName,
-                                        menu::FeatureLevel::IW4 /* IW4MS shares IW4's menu feature set; the enum is about the format, not the build */,
-                                        m_search_path);
-
-            reader.IncludeZoneState(zoneState);
-            reader.SetPermissiveMode(ObjLoading::Configuration.MenuPermissiveParsing);
-
-            return reader.ReadMenuFile();
         }
 
+        AssetCreationResult CreateAsset(const std::string& assetName, AssetCreationContext& context) override
+        {
+            const auto fileName = std::format("ui_mp/{}.menu", assetName);
+
+            auto& zoneState = context.GetZoneAssetCreationState<menu::MenuAssetZoneState>();
+            auto& conversionState = context.GetZoneAssetCreationState<MenuConversionZoneState>();
+
+            if (conversionState.m_menus_by_filename.contains(fileName))
+                return AssetCreationResult::NoAction();
+
+            const auto file = m_search_path.Open(fileName);
+            if (!file.IsOpen())
+                return AssetCreationResult::NoAction();
+
+            const auto menuFileResult = ParseMenuFile(*file.m_stream, fileName, zoneState, m_search_path);
+            if (!menuFileResult)
+            {
+                con::error("Could not read menu file \"{}\"", fileName);
+                return AssetCreationResult::Failure();
+            }
+
+            if (!menuFileResult->m_menus_to_load.empty())
+                con::warn("Menu file has menus to load even though it is not a menu list, ignoring: \"{}\"", fileName);
+
+            std::vector<menuDef_t*> menus;
+            std::vector<XAssetInfo<menuDef_t>*> addedMenus;
+            if (!ProcessParsedResults(fileName, context, *menuFileResult, zoneState, conversionState, m_memory, m_search_path, menus, addedMenus))
+                return AssetCreationResult::Failure();
+
+            for (auto* menu : addedMenus)
+            {
+                if (menu->m_name == assetName)
+                    return AssetCreationResult::Success(menu);
+            }
+
+            con::error("Menu file \"{}\" does not define a menu named \"{}\"", fileName, assetName);
+            return AssetCreationResult::Failure();
+        }
+
+    private:
         MemoryManager& m_memory;
         ISearchPath& m_search_path;
     };
@@ -221,5 +279,10 @@ namespace menu
     std::unique_ptr<AssetCreator<AssetMenuList>> CreateMenuListLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
     {
         return std::make_unique<MenuListLoader>(memory, searchPath);
+    }
+
+    std::unique_ptr<AssetCreator<AssetMenu>> CreateMenuLoaderIW4MS(MemoryManager& memory, ISearchPath& searchPath)
+    {
+        return std::make_unique<MenuLoader>(memory, searchPath);
     }
 } // namespace menu

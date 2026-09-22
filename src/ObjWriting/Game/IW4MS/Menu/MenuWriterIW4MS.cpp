@@ -1,5 +1,7 @@
 #include "MenuWriterIW4MS.h"
 
+#include "Utils/Logging/Log.h"
+
 #include "Game/IW4MS/MenuConstantsIW4MS.h"
 #include "Menu/AbstractMenuWriter.h"
 #include "ObjWriting.h"
@@ -187,12 +189,19 @@ namespace
         {
             const auto& expEntry = statement->entries[currentPos];
 
-            if (spaceNext && expEntry.data.op != OP_COMMA)
-                m_stream << " ";
-
             if (expEntry.data.op == OP_LEFTPAREN)
             {
                 const auto closingParenPos = FindStatementClosingParenthesis(statement, currentPos);
+
+                if (closingParenPos == currentPos + 1)
+                {
+                    currentPos = closingParenPos + 1;
+                    return;
+                }
+
+                if (spaceNext)
+                    m_stream << " ";
+
                 m_stream << "(";
                 WriteStatementEntryRange(statement, currentPos + 1, closingParenPos);
                 m_stream << ")";
@@ -202,6 +211,9 @@ namespace
             }
             else if (expEntry.data.op >= EXP_FUNC_STATIC_DVAR_INT && expEntry.data.op <= EXP_FUNC_STATIC_DVAR_STRING)
             {
+                if (spaceNext)
+                    m_stream << " ";
+
                 switch (expEntry.data.op)
                 {
                 case EXP_FUNC_STATIC_DVAR_INT:
@@ -258,8 +270,14 @@ namespace
             }
             else
             {
+                if (spaceNext && expEntry.data.op != OP_COMMA)
+                    m_stream << " ";
+
                 if (expEntry.data.op >= 0 && static_cast<unsigned>(expEntry.data.op) < std::extent_v<decltype(g_expFunctionNames)>)
                     m_stream << g_expFunctionNames[expEntry.data.op];
+                else
+                    con::warn("Menu expression uses operation {}, which has no known name; the dumped menu will not parse",
+                              static_cast<int>(expEntry.data.op));
 
                 if (expEntry.data.op >= OP_COUNT)
                 {
@@ -282,7 +300,10 @@ namespace
             const auto& operand = statement->entries[currentPos].data.operand;
 
             if (operand.internals.function == nullptr)
+            {
+                con::warn("Menu expression has a function operand with no function; the dumped menu will not parse");
                 return;
+            }
 
             if (!ObjWriting::Configuration.MenuLegacyMode)
             {
@@ -342,6 +363,8 @@ namespace
                 break;
 
             default:
+                con::warn("Menu expression operand has unknown data type {}; the dumped menu will not parse",
+                          static_cast<int>(operand.dataType));
                 break;
             }
 

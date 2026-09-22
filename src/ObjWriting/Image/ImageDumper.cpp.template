@@ -108,7 +108,10 @@ namespace image
         const auto* image = asset.Asset();
         auto texture = CONVERTER_NAME().Convert(asset, context.m_obj_search_path);
         if (!texture)
+        {
+            context.MarkAssetSkipped();
             return;
+        }
         
         auto convertedTexture = ConvertTextureForDdsFileOutputIfNecessary(texture.get());
         if (convertedTexture)
@@ -120,6 +123,7 @@ namespace image
                       image->name,
                       GetImageOutputFormatName(ObjWriting::Configuration.ImageOutputFormat),
                       texture->GetFormat()->GetName());
+            context.MarkAssetSkipped();
             return;
         }
 

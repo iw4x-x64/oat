@@ -191,6 +191,12 @@ namespace IW4MS
         "allsplitscreenprofilescansave",
         "allsplitscreenprofilesaresignedin",
         "coopready",
+        "dowehavemappack",
+        "cantogglefullscreen",
+        "isbasegamelicensevalid",
+        "isprofilesyncedwithcloud",
+        "getstoremismatchmessagegdk",
+        "getpartyinvitedescription",
     };
 
     inline const ItemExpressionTargetBinding floatExpressionTargetBindings[ITEM_FLOATEXP_TGT_COUNT]{

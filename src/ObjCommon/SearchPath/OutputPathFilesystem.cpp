@@ -30,6 +30,13 @@ std::unique_ptr<std::ostream> OutputPathFilesystem::Open(const std::string& file
         return nullptr;
     }
 
+    if (fs::is_directory(fullNewPath, ec))
+    {
+        con::warn("Not writing '{}': a directory of that name already exists in the output, so the asset cannot be stored beside it",
+                  fileName);
+        return nullptr;
+    }
+
     std::ofstream stream(fullNewPath, std::ios::binary | std::ios::out);
     if (!stream.is_open())
     {

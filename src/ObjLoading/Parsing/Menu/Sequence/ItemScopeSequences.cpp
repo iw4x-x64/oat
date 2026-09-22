@@ -84,14 +84,18 @@ namespace
             if (type < 0)
                 throw ParsingException(pos, "Invalid item type");
 
-            if (item.m_feature_type != CommonItemFeatureType::NONE)
+            if (item.m_type_explicit && item.m_feature_type != CommonItemFeatureType::NONE)
                 throw ParsingException(pos, "Item type has already been set");
 
+            const auto hadDefaultEditField = !item.m_type_explicit && item.m_feature_type == CommonItemFeatureType::EDIT_FIELD;
+
             item.m_type = type;
+            item.m_type_explicit = true;
 
             switch (featureLevel)
             {
             case FeatureLevel::IW4:
+            case FeatureLevel::IW4MS:
                 if (static_cast<unsigned>(type) >= std::extent_v<decltype(IW4_FEATURE_TYPE_BY_TYPE)>)
                     throw ParsingException(pos, "Invalid item type");
                 item.m_feature_type = IW4_FEATURE_TYPE_BY_TYPE[static_cast<unsigned>(type)];
@@ -103,6 +107,14 @@ namespace
                     throw ParsingException(pos, "Invalid item type");
                 item.m_feature_type = IW5_FEATURE_TYPE_BY_TYPE[static_cast<unsigned>(type)];
                 break;
+            }
+
+            if (hadDefaultEditField)
+            {
+                if (item.m_feature_type != CommonItemFeatureType::EDIT_FIELD)
+                    throw ParsingException(pos, "Item type must be declared before any declaration specific to it");
+
+                return;
             }
 
             switch (item.m_feature_type)
@@ -130,8 +142,14 @@ namespace
                 throw ParsingException(pos, "Item must have be listbox to use this declaration");
         }
 
-        static void EnsureHasEditFieldFeatures(const CommonItemDef& item, const TokenPos& pos)
+        static void EnsureHasEditFieldFeatures(CommonItemDef& item, const TokenPos& pos)
         {
+            if (!item.m_type_explicit && item.m_feature_type == CommonItemFeatureType::NONE)
+            {
+                item.m_feature_type = CommonItemFeatureType::EDIT_FIELD;
+                item.m_edit_field_features = std::make_unique<CommonItemFeaturesEditField>();
+            }
+
             if (item.m_feature_type != CommonItemFeatureType::EDIT_FIELD || !item.m_edit_field_features)
                 throw ParsingException(pos, "Item must have be edit field to use this declaration");
         }
@@ -478,7 +496,7 @@ namespace
         void ProcessMatch(MenuFileParserState* state, SequenceResult<SimpleParserValue>& result) const override
         {
             assert(state->m_current_item);
-            assert(state->m_feature_level == FeatureLevel::IW4 || state->m_feature_level == FeatureLevel::IW5);
+            assert(UsesIw4MenuGrammar(state->m_feature_level) || state->m_feature_level == FeatureLevel::IW5);
 
             const auto& firstToken = result.NextCapture(CAPTURE_FIRST_TOKEN);
             ItemScopeOperations::EnsureHasListboxFeatures(*state->m_current_item, firstToken.GetPos());
@@ -491,7 +509,7 @@ namespace
             size_t baseColumnCount;
             const char* syntax;
             bool hasHeightValues;
-            if (state->m_feature_level == FeatureLevel::IW4)
+            if (UsesIw4MenuGrammar(state->m_feature_level))
             {
                 baseColumnCount = BASE_COLUMN_COUNT_IW4;
                 syntax = SYNTAX_IW4;
