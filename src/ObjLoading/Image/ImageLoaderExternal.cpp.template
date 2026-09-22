@@ -47,6 +47,7 @@
 #set COMMON_HEADER "\"Game/" + GAME + "/Common" + GAME + ".h\""
 #include COMMON_HEADER
 #include "Image/ImageLoaderCommon.h"
+#include "Image/IwiTypes.h"
 #include "Utils/Logging/Log.h"
 
 #include <cstring>
@@ -72,7 +73,7 @@ namespace
             const auto earlyReturn = loadingResult.GetResultIfCancelled();
             if (earlyReturn)
                 return *earlyReturn;
-            
+
             const auto* texture = loadingResult.m_texture.get();
 
             auto* image = m_memory.Alloc<GfxImage>();
@@ -97,10 +98,87 @@ namespace
             image->streamedPartCount = 1;
 #endif
 
+#ifdef FEATURE_IW4MS
+            // IW4MS keeps the pixels in the zone. Retail x64 fastfiles embed every
+            // image they carry, and a delay-load image, which on x86 is streamed
+            // from an IWD, reaches the x64 renderer with no texture behind it:
+            // drawing one faults on the missing base map. So the iwi read above is
+            // written into the load definition, the way the retail zones hold it.
+            //
+            EmbedPixels(*image, *texture, loadingResult.m_meta);
+#else
             image->texture.loadDef = m_memory.Alloc<GfxImageLoadDef>();
+#endif
 
             return AssetCreationResult::Success(context.AddAsset<AssetImage>(assetName, image));
         }
+
+#ifdef FEATURE_IW4MS
+        void EmbedPixels(GfxImage& image, const Texture& texture, const CommonIwiMetaData& meta) const
+        {
+            image.delayLoadPixels = false;
+
+            image.category = IMG_CATEGORY_LOAD_FROM_FILE;
+            image.semantic = TS_2D;
+            image.picmip.platform[0] = 0;
+            image.picmip.platform[1] = 0;
+            image.noPicmip = meta.m_no_picmip;
+
+            switch (texture.GetTextureType())
+            {
+            case TextureType::T_2D:
+                image.mapType = MAPTYPE_2D;
+                break;
+
+            case TextureType::T_3D:
+                image.mapType = MAPTYPE_3D;
+                break;
+
+            case TextureType::T_CUBE:
+                image.mapType = MAPTYPE_CUBE;
+                break;
+
+            default:
+                image.mapType = MAPTYPE_NONE;
+                break;
+            }
+
+            const auto mipCount = texture.HasMipMaps() ? texture.GetMipMapCount() : 1;
+            const auto faceCount = texture.GetFaceCount();
+
+            auto dataSize = 0uz;
+            for (auto mipLevel = 0; mipLevel < mipCount; mipLevel++)
+                dataSize += texture.GetSizeOfMipLevel(mipLevel) * faceCount;
+
+            image.cardMemory.platform[0] = static_cast<int>(dataSize);
+            image.cardMemory.platform[1] = static_cast<int>(dataSize);
+
+            auto* loadDef = static_cast<GfxImageLoadDef*>(m_memory.AllocRaw(offsetof(GfxImageLoadDef, data) + dataSize));
+            image.texture.loadDef = loadDef;
+            loadDef->levelCount = static_cast<char>(mipCount);
+            loadDef->flags = 0;
+            if (!texture.HasMipMaps())
+                loadDef->flags |= iwi8::IMG_FLAG_NOMIPMAPS;
+            if (texture.GetTextureType() == TextureType::T_CUBE)
+                loadDef->flags |= iwi8::IMG_FLAG_MAPTYPE_CUBE;
+            if (texture.GetTextureType() == TextureType::T_3D)
+                loadDef->flags |= iwi8::IMG_FLAG_MAPTYPE_3D;
+            loadDef->format = static_cast<int>(texture.GetFormat()->GetD3DFormat());
+            loadDef->resourceSize = static_cast<unsigned>(dataSize);
+
+            char* currentDataBuffer = loadDef->data;
+            for (auto mipLevel = 0; mipLevel < mipCount; mipLevel++)
+            {
+                const auto mipSize = texture.GetSizeOfMipLevel(mipLevel);
+
+                for (auto face = 0; face < faceCount; face++)
+                {
+                    memcpy(currentDataBuffer, texture.GetBufferForMipLevel(mipLevel, face), mipSize);
+                    currentDataBuffer += mipSize;
+                }
+            }
+        }
+#endif
 
         MemoryManager& m_memory;
         ISearchPath& m_search_path;
