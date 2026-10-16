@@ -193,10 +193,14 @@ namespace IW4MS
         "coopready",
         "dowehavemappack",
         "cantogglefullscreen",
+        "cansetresolution",
         "isbasegamelicensevalid",
         "isprofilesyncedwithcloud",
         "getstoremismatchmessagegdk",
         "getpartyinvitedescription",
+        "isgdk",
+        "getplatformspecificstring",
+        "issteam",
     };
 
     inline const ItemExpressionTargetBinding floatExpressionTargetBindings[ITEM_FLOATEXP_TGT_COUNT]{
