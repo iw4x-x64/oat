@@ -37,6 +37,17 @@ namespace menu
                 CreateDumpingStateForMenuListIW4MS(zoneState, menuListAsset->Asset());
         }
 
+        // If a menu list is named after one of its menus, then the list dumper has already written this menu into the list file, along with
+        // loadMenu entries for the list's other menus. Writing the menu again here would overwrite that file and lose those entries, so we
+        // leave it to the list.
+        //
+        if (ObjWriting::ShouldHandleAssetType(ASSET_TYPE_MENULIST))
+        {
+            const auto menuDumpingState = zoneState->m_menu_dumping_state_map.find(menu);
+            if (menuDumpingState != zoneState->m_menu_dumping_state_map.end() && menuDumpingState->second.m_alias_menu_list != nullptr)
+                return;
+        }
+
         const auto menuFilePath = GetPathForMenu(zoneState, asset);
         const auto assetFile = context.OpenAssetFile(menuFilePath);
 
