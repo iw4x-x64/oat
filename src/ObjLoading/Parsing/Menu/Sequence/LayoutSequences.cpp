@@ -619,6 +619,14 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
             SetOnce(state->m_current_menu->m_layout_motion, std::move(motion), pos, "motion");
         }));
 
+    sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>(
+        "perspective",
+        [](const MenuFileParserState* state, const TokenPos& pos, const double value)
+        {
+            LayoutSequences::EnsureIsLayoutMenu(state, pos);
+            SetOnce(state->m_current_menu->m_layout_perspective, EnsurePositive(value, pos, "perspective"), pos, "perspective");
+        }));
+
     return sequences;
 }
 
@@ -664,8 +672,8 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
             SetOnce(CurrentItemLayout(state, pos).m_motion, std::move(motion), pos, "motion");
         }));
 
-    // The enter, focus and exit states: offsets of the position or the size, which may be anything, opacities, which go from 0 to 1, and delays, which are
-    // never negative
+    // The pose and the enter, focus and exit states: offsets of the position or the size, depths, rotations and scales, which may be anything,
+    // opacities, which go from 0 to 1, and delays, which are never negative
     enum class StateValue : std::uint8_t
     {
         OFFSET,
@@ -681,18 +689,38 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
     };
 
     constexpr StateProperty states[]{
+        {"depth",        &CommonItemLayout::m_depth,          StateValue::OFFSET },
+        {"rotateX",      &CommonItemLayout::m_rotate_x,       StateValue::OFFSET },
+        {"rotateY",      &CommonItemLayout::m_rotate_y,       StateValue::OFFSET },
+        {"rotateZ",      &CommonItemLayout::m_rotate_z,       StateValue::OFFSET },
+        {"scale",        &CommonItemLayout::m_scale,          StateValue::OFFSET },
         {"enterOffsetX", &CommonItemLayout::m_enter_offset_x, StateValue::OFFSET },
         {"enterOffsetY", &CommonItemLayout::m_enter_offset_y, StateValue::OFFSET },
         {"enterSizeX",   &CommonItemLayout::m_enter_size_x,   StateValue::OFFSET },
         {"enterSizeY",   &CommonItemLayout::m_enter_size_y,   StateValue::OFFSET },
+        {"enterDepth",   &CommonItemLayout::m_enter_depth,    StateValue::OFFSET },
+        {"enterRotateX", &CommonItemLayout::m_enter_rotate_x, StateValue::OFFSET },
+        {"enterRotateY", &CommonItemLayout::m_enter_rotate_y, StateValue::OFFSET },
+        {"enterRotateZ", &CommonItemLayout::m_enter_rotate_z, StateValue::OFFSET },
+        {"enterScale",   &CommonItemLayout::m_enter_scale,    StateValue::OFFSET },
         {"enterOpacity", &CommonItemLayout::m_enter_opacity,  StateValue::OPACITY},
         {"enterDelay",   &CommonItemLayout::m_enter_delay,    StateValue::DELAY  },
         {"focusOffsetX", &CommonItemLayout::m_focus_offset_x, StateValue::OFFSET },
         {"focusOffsetY", &CommonItemLayout::m_focus_offset_y, StateValue::OFFSET },
+        {"focusDepth",   &CommonItemLayout::m_focus_depth,    StateValue::OFFSET },
+        {"focusRotateX", &CommonItemLayout::m_focus_rotate_x, StateValue::OFFSET },
+        {"focusRotateY", &CommonItemLayout::m_focus_rotate_y, StateValue::OFFSET },
+        {"focusRotateZ", &CommonItemLayout::m_focus_rotate_z, StateValue::OFFSET },
+        {"focusScale",   &CommonItemLayout::m_focus_scale,    StateValue::OFFSET },
         {"exitOffsetX",  &CommonItemLayout::m_exit_offset_x,  StateValue::OFFSET },
         {"exitOffsetY",  &CommonItemLayout::m_exit_offset_y,  StateValue::OFFSET },
         {"exitSizeX",    &CommonItemLayout::m_exit_size_x,    StateValue::OFFSET },
         {"exitSizeY",    &CommonItemLayout::m_exit_size_y,    StateValue::OFFSET },
+        {"exitDepth",    &CommonItemLayout::m_exit_depth,     StateValue::OFFSET },
+        {"exitRotateX",  &CommonItemLayout::m_exit_rotate_x,  StateValue::OFFSET },
+        {"exitRotateY",  &CommonItemLayout::m_exit_rotate_y,  StateValue::OFFSET },
+        {"exitRotateZ",  &CommonItemLayout::m_exit_rotate_z,  StateValue::OFFSET },
+        {"exitScale",    &CommonItemLayout::m_exit_scale,     StateValue::OFFSET },
         {"exitOpacity",  &CommonItemLayout::m_exit_opacity,   StateValue::OPACITY},
         {"exitDelay",    &CommonItemLayout::m_exit_delay,     StateValue::DELAY  },
     };

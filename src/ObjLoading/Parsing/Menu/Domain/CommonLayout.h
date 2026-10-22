@@ -125,21 +125,41 @@ namespace menu
         std::optional<double> m_compact_below;
         bool m_clip_children = false;
 
-        // The motion of the item, the menu's if absent, the state it enters from, the state it moves to while it has focus and the state it
-        // exits to, with the delays in seconds after the menu opens at which it enters and exits
+        // The motion of the item, the menu's if absent, its pose in space, the state it enters from, the state it moves to while it has focus
+        // and the state it exits to, with the delays in seconds after the menu opens at which it enters and exits
         std::optional<LayoutMotion> m_motion;
+        std::optional<double> m_depth;
+        std::optional<double> m_rotate_x;
+        std::optional<double> m_rotate_y;
+        std::optional<double> m_rotate_z;
+        std::optional<double> m_scale;
         std::optional<double> m_enter_offset_x;
         std::optional<double> m_enter_offset_y;
         std::optional<double> m_enter_size_x;
         std::optional<double> m_enter_size_y;
+        std::optional<double> m_enter_depth;
+        std::optional<double> m_enter_rotate_x;
+        std::optional<double> m_enter_rotate_y;
+        std::optional<double> m_enter_rotate_z;
+        std::optional<double> m_enter_scale;
         std::optional<double> m_enter_opacity;
         std::optional<double> m_enter_delay;
         std::optional<double> m_focus_offset_x;
         std::optional<double> m_focus_offset_y;
+        std::optional<double> m_focus_depth;
+        std::optional<double> m_focus_rotate_x;
+        std::optional<double> m_focus_rotate_y;
+        std::optional<double> m_focus_rotate_z;
+        std::optional<double> m_focus_scale;
         std::optional<double> m_exit_offset_x;
         std::optional<double> m_exit_offset_y;
         std::optional<double> m_exit_size_x;
         std::optional<double> m_exit_size_y;
+        std::optional<double> m_exit_depth;
+        std::optional<double> m_exit_rotate_x;
+        std::optional<double> m_exit_rotate_y;
+        std::optional<double> m_exit_rotate_z;
+        std::optional<double> m_exit_scale;
         std::optional<double> m_exit_opacity;
         std::optional<double> m_exit_delay;
     };

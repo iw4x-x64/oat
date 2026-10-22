@@ -341,6 +341,82 @@ exitDelay 0
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Writes the pose of a layout menu", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "pose"
+		layoutVersion 1
+		perspective 1200
+		itemDef
+		{
+			name "card"
+			exitScale 2
+			rotateY -20.5
+			depth -50
+			enterRotateY (45 * 2)
+			enterScale 0
+			enterDepth 400
+			focusRotateX -5
+			focusDepth 30
+			focusScale 1.1
+			exitRotateZ -15
+			exitDepth -800
+		}
+		itemDef
+		{
+			name "tilt"
+			rotateX 10
+			rotateZ 45
+			scale 1.5
+			enterRotateX 90
+			enterRotateZ 15
+			focusRotateY 12
+			focusRotateZ 2
+			exitRotateX 0
+			exitRotateY 90
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/pose") == R"(layoutVersion 1
+menu "pose" 2
+perspective 1200
+
+item 0 "card"
+depth -50
+rotateY -20.5
+enterDepth 400
+enterRotateY 90
+enterScale 0
+focusDepth 30
+focusRotateX -5
+focusScale 1.1
+exitDepth -800
+exitRotateZ -15
+exitScale 2
+
+item 1 "tilt"
+rotateX 10
+rotateZ 45
+scale 1.5
+enterRotateX 90
+enterRotateZ 15
+focusRotateY 12
+focusRotateZ 2
+exitRotateX 0
+exitRotateY 90
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
     {
         const auto [description, menu] = GENERATE(table<const char*, const char*>({
@@ -391,6 +467,11 @@ exitDelay 0
             {"negative enterDelay",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterDelay -1 } })"                },
             {"exitDelay before enterDelay",           R"(menuDef { name "m" layoutVersion 1 itemDef { exitDelay 1 enterDelay 2 } })"     },
             {"exitDelay without layoutVersion",       R"(menuDef { name "m" itemDef { exitDelay 1 } })"                                  },
+            {"perspective without layoutVersion",     R"(menuDef { name "m" perspective 800 })"                                          },
+            {"zero perspective",                      R"(menuDef { name "m" layoutVersion 1 perspective 0 })"                            },
+            {"repeated perspective",                  R"(menuDef { name "m" layoutVersion 1 perspective 800 perspective 900 })"          },
+            {"rotateY without layoutVersion",         R"(menuDef { name "m" itemDef { rotateY 90 } })"                                   },
+            {"repeated enterScale",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterScale 0 enterScale 1 } })"    },
         }));
 
         INFO(description);

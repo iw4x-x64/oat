@@ -159,6 +159,9 @@ namespace
             if (menu.m_layout_motion)
                 m_stream << MotionStatement(*menu.m_layout_motion);
 
+            if (menu.m_layout_perspective)
+                m_stream << std::format("perspective {}\n", *menu.m_layout_perspective);
+
             for (auto i = 0uz; i < menu.m_items.size(); i++)
                 WriteItem(i, *menu.m_items[i]);
         }
@@ -190,18 +193,38 @@ namespace
                 m_stream << MotionStatement(*layout.m_motion);
 
             const std::pair<const char*, const std::optional<double>&> states[]{
+                {"depth",        layout.m_depth         },
+                {"rotateX",      layout.m_rotate_x      },
+                {"rotateY",      layout.m_rotate_y      },
+                {"rotateZ",      layout.m_rotate_z      },
+                {"scale",        layout.m_scale         },
                 {"enterOffsetX", layout.m_enter_offset_x},
                 {"enterOffsetY", layout.m_enter_offset_y},
                 {"enterSizeX",   layout.m_enter_size_x  },
                 {"enterSizeY",   layout.m_enter_size_y  },
+                {"enterDepth",   layout.m_enter_depth   },
+                {"enterRotateX", layout.m_enter_rotate_x},
+                {"enterRotateY", layout.m_enter_rotate_y},
+                {"enterRotateZ", layout.m_enter_rotate_z},
+                {"enterScale",   layout.m_enter_scale   },
                 {"enterOpacity", layout.m_enter_opacity },
                 {"enterDelay",   layout.m_enter_delay   },
                 {"focusOffsetX", layout.m_focus_offset_x},
                 {"focusOffsetY", layout.m_focus_offset_y},
+                {"focusDepth",   layout.m_focus_depth   },
+                {"focusRotateX", layout.m_focus_rotate_x},
+                {"focusRotateY", layout.m_focus_rotate_y},
+                {"focusRotateZ", layout.m_focus_rotate_z},
+                {"focusScale",   layout.m_focus_scale   },
                 {"exitOffsetX",  layout.m_exit_offset_x },
                 {"exitOffsetY",  layout.m_exit_offset_y },
                 {"exitSizeX",    layout.m_exit_size_x   },
                 {"exitSizeY",    layout.m_exit_size_y   },
+                {"exitDepth",    layout.m_exit_depth    },
+                {"exitRotateX",  layout.m_exit_rotate_x },
+                {"exitRotateY",  layout.m_exit_rotate_y },
+                {"exitRotateZ",  layout.m_exit_rotate_z },
+                {"exitScale",    layout.m_exit_scale    },
                 {"exitOpacity",  layout.m_exit_opacity  },
                 {"exitDelay",    layout.m_exit_delay    },
             };
