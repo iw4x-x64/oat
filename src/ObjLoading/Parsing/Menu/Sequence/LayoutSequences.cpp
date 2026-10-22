@@ -856,6 +856,8 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
         {"enterDelay",   &CommonItemLayout::m_enter_delay,    StateValue::DELAY  },
         {"focusOffsetX", &CommonItemLayout::m_focus_offset_x, StateValue::OFFSET },
         {"focusOffsetY", &CommonItemLayout::m_focus_offset_y, StateValue::OFFSET },
+        {"focusSizeX",   &CommonItemLayout::m_focus_size_x,   StateValue::OFFSET },
+        {"focusSizeY",   &CommonItemLayout::m_focus_size_y,   StateValue::OFFSET },
         {"focusDepth",   &CommonItemLayout::m_focus_depth,    StateValue::OFFSET },
         {"focusRotateX", &CommonItemLayout::m_focus_rotate_x, StateValue::OFFSET },
         {"focusRotateY", &CommonItemLayout::m_focus_rotate_y, StateValue::OFFSET },

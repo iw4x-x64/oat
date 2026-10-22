@@ -171,6 +171,8 @@ namespace menu
         std::optional<double> m_enter_delay;
         std::optional<double> m_focus_offset_x;
         std::optional<double> m_focus_offset_y;
+        std::optional<double> m_focus_size_x;
+        std::optional<double> m_focus_size_y;
         std::optional<double> m_focus_depth;
         std::optional<double> m_focus_rotate_x;
         std::optional<double> m_focus_rotate_y;

@@ -247,6 +247,7 @@ item 0 "a\"b\\c"
 			motion spring 120 22 RK4
 			focusOffsetX 8
 			focusOffsetY -4
+			focusSizeY (50 + 24)
 		}
 		itemDef
 		{
@@ -279,6 +280,7 @@ item 1 "button"
 motion spring 120 22 rk4
 focusOffsetX 8
 focusOffsetY -4
+focusSizeY 74
 
 item 2 "label"
 motion none

@@ -243,6 +243,8 @@ namespace
                 {"enterDelay",   layout.m_enter_delay   },
                 {"focusOffsetX", layout.m_focus_offset_x},
                 {"focusOffsetY", layout.m_focus_offset_y},
+                {"focusSizeX",   layout.m_focus_size_x  },
+                {"focusSizeY",   layout.m_focus_size_y  },
                 {"focusDepth",   layout.m_focus_depth   },
                 {"focusRotateX", layout.m_focus_rotate_x},
                 {"focusRotateY", layout.m_focus_rotate_y},
