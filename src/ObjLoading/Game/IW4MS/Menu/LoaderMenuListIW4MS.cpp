@@ -3,6 +3,7 @@
 #include "Game/IW4MS/IW4MS.h"
 #include "Game/IW4MS/Menu/MenuConversionZoneStateIW4MS.h"
 #include "Game/IW4MS/Menu/MenuConverterIW4MS.h"
+#include "Menu/MenuLayoutDescription.h"
 #include "ObjLoading.h"
 #include "Parsing/Menu/MenuFileReader.h"
 #include "Utils/Logging/Log.h"
@@ -27,6 +28,27 @@ namespace
         reader.SetPermissiveMode(ObjLoading::Configuration.MenuPermissiveParsing);
 
         return reader.ReadMenuFile();
+    }
+
+    // Adds the layout description of a menu that declares a layoutVersion, which the client reads by the menu's name
+    bool AddLayoutDescription(const menu::CommonMenuDef& commonMenu, AssetCreationContext& context, MemoryManager& memory)
+    {
+        const auto assetName = menu::GetLayoutDescriptionName(commonMenu.m_name);
+        const auto description = menu::CreateLayoutDescription(commonMenu);
+
+        auto* rawFile = memory.Alloc<RawFile>();
+        rawFile->name = memory.Dup(assetName.c_str());
+        rawFile->compressedLen = 0;
+        rawFile->len = static_cast<int>(description.size());
+        rawFile->data.buffer = memory.Dup(description.c_str());
+
+        if (!context.AddAsset<AssetRawFile>(assetName, rawFile))
+        {
+            con::error("Failed to add the layout description of menu \"{}\"", commonMenu.m_name);
+            return false;
+        }
+
+        return true;
     }
 
     bool ProcessParsedResults(const std::string& fileName,
@@ -72,6 +94,9 @@ namespace
                 con::error("Failed to convert menu file \"{}\"", commonMenu->m_name);
                 return false;
             }
+
+            if (commonMenu->m_layout_version && !AddLayoutDescription(*commonMenu, context, memory))
+                return false;
 
             menus.emplace_back(menuAsset);
             auto* menuAssetInfo = context.AddAsset(std::move(menuRegistration));
