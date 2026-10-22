@@ -1,12 +1,14 @@
 #pragma once
 
 #include "CommonItemDef.h"
+#include "CommonLayout.h"
 #include "CommonMenuTypes.h"
 #include "EventHandler/CommonEventHandlerSet.h"
 #include "Parsing/Simple/Expression/ISimpleExpression.h"
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -60,6 +62,9 @@ namespace menu
         bool m_hidden_during_flashbang = false;
         bool m_hidden_during_ui = false;
         bool m_text_only_focus = false;
+
+        std::optional<int> m_layout_version;
+        std::optional<LayoutSpace> m_layout_space;
 
         std::vector<std::unique_ptr<CommonItemDef>> m_items;
     };

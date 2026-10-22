@@ -1,5 +1,6 @@
 #pragma once
 
+#include "CommonLayout.h"
 #include "CommonMenuTypes.h"
 #include "EventHandler/CommonEventHandlerSet.h"
 #include "Parsing/Simple/Expression/ISimpleExpression.h"
@@ -165,5 +166,7 @@ namespace menu
         std::unique_ptr<CommonItemFeaturesMultiValue> m_multi_value_features;
         std::string m_enum_dvar_name;
         std::unique_ptr<CommonItemFeaturesNewsTicker> m_news_ticker_features;
+
+        CommonItemLayout m_layout;
     };
 } // namespace menu
