@@ -196,6 +196,15 @@ namespace
             if (layout.m_radius)
                 m_stream << std::format("radius {}\n", *layout.m_radius);
 
+            if (layout.m_scene)
+            {
+                const auto& scene = *layout.m_scene;
+                m_stream << std::format("scene \"{}\" {} {} {}", scene.m_map, scene.m_origin[0], scene.m_origin[1], scene.m_origin[2]);
+                if (scene.m_size)
+                    m_stream << std::format(" {}", *scene.m_size);
+                m_stream << "\n";
+            }
+
             if (layout.m_compact_below)
                 m_stream << std::format("compactBelow {}\n", *layout.m_compact_below);
 

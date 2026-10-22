@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -39,6 +40,15 @@ namespace menu
         COVER,
         NATIVE,
         TILED
+    };
+
+    // The map an item stands for: its zone's name, the point of the map at the item's center and how many canonical units one map unit
+    // spans, 1 if absent
+    struct LayoutScene
+    {
+        std::string m_map;
+        std::array<double, 3> m_origin;
+        std::optional<double> m_size;
     };
 
     struct LayoutLength
@@ -131,6 +141,9 @@ namespace menu
 
         // The radius of the item's rounded corners, square if absent
         std::optional<double> m_radius;
+
+        // The map the item stands for, if any
+        std::optional<LayoutScene> m_scene;
 
         // The motion of the item, the menu's if absent, its pose in space, the state it enters from, the state it moves to while it has focus
         // and the state it exits to, with the delays in seconds after the menu opens at which it enters and exits

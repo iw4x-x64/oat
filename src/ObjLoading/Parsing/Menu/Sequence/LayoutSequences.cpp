@@ -248,6 +248,55 @@ namespace
         }
     };
 
+    // Matches scene followed by the map's name and one or more numeric expressions
+    class SequenceScene final : public MenuFileParser::sequence_t
+    {
+        static constexpr auto CAPTURE_FIRST_TOKEN = 1;
+        static constexpr auto CAPTURE_MAP = 2;
+
+    public:
+        SequenceScene()
+        {
+            const MenuMatcherFactory create(this);
+
+            AddLabeledMatchers(MenuExpressionMatchers().Expression(this), MenuExpressionMatchers::LABEL_EXPRESSION);
+            AddMatchers({
+                create.KeywordIgnoreCase("scene").Capture(CAPTURE_FIRST_TOKEN),
+                create.Text().Capture(CAPTURE_MAP),
+                create.NumericExpression(),
+                create.OptionalLoop(create.NumericExpression()),
+            });
+        }
+
+    protected:
+        void ProcessMatch(MenuFileParserState* state, SequenceResult<SimpleParserValue>& result) const override
+        {
+            const auto& firstToken = result.NextCapture(CAPTURE_FIRST_TOKEN);
+            const auto& mapToken = result.NextCapture(CAPTURE_MAP);
+            const auto& pos = firstToken.GetPos();
+
+            std::vector<double> values;
+            while (result.PeekTag() != AbstractMatcher<SimpleParserValue>::NO_ID)
+                values.emplace_back(MenuMatcherFactory::TokenNumericExpressionValue(state, result));
+
+            if (values.size() != 3u && values.size() != 4u)
+                throw ParsingException(pos, std::format("Layout property \"scene\" takes a map and 3 or 4 values instead of {}", values.size()));
+
+            const auto map = MenuMatcherFactory::TokenTextValue(mapToken);
+            if (map.empty())
+                throw ParsingException(mapToken.GetPos(), "Layout property \"scene\" must name a map");
+
+            LayoutScene scene{
+                .m_map = map, .m_origin = {values[0], values[1], values[2]},
+                     .m_size = std::nullopt
+            };
+            if (values.size() == 4u)
+                scene.m_size = EnsurePositive(values[3], pos, "scene size");
+
+            SetOnce(CurrentItemLayout(state, pos).m_scene, std::move(scene), pos, "scene");
+        }
+    };
+
     // Matches wrap with an optional 0 or 1, which is how the compact form turns the normal one off
     class SequenceWrap final : public MenuFileParser::sequence_t
     {
@@ -704,6 +753,8 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
 
                                                                                       SetOnce(CurrentItemLayout(state, pos).m_radius, value, pos, "radius");
                                                                                   }));
+
+    sequences.emplace_back(std::make_unique<SequenceScene>());
 
     sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>(
         "compactBelow",

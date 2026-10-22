@@ -497,71 +497,115 @@ item 1 "square"
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Writes the map a layout item stands for", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "showcase"
+		layoutVersion 1
+		itemDef
+		{
+			name "world"
+			scene "mp_rust" 120 -340.5 64
+		}
+		itemDef
+		{
+			name "close"
+			scene "mp_rust" 0 0 0 12.5
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/showcase") == R"(layoutVersion 1
+menu "showcase" 2
+
+item 0 "world"
+scene "mp_rust" 120 -340.5 64
+
+item 1 "close"
+scene "mp_rust" 0 0 0 12.5
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
     {
         const auto [description, menu] = GENERATE(table<const char*, const char*>({
-            {"layout property without layoutVersion", R"(menuDef { name "m" itemDef { anchor left top } })"                              },
-            {"layoutSpace without layoutVersion",     R"(menuDef { name "m" layoutSpace safe })"                                         },
-            {"unsupported layoutVersion",             R"(menuDef { name "m" layoutVersion 2 })"                                          },
-            {"layoutVersion after itemDef",           R"(menuDef { name "m" itemDef { } layoutVersion 1 })"                              },
-            {"rect alignment",                        R"(menuDef { name "m" layoutVersion 1 itemDef { rect 0 0 10 10 1 1 } })"           },
-            {"origin",                                R"(menuDef { name "m" layoutVersion 1 itemDef { origin 4 4 } })"                   },
-            {"rect expression",                       R"(menuDef { name "m" layoutVersion 1 itemDef { exp rect X(4) } })"                },
-            {"repeated property",                     R"(menuDef { name "m" layoutVersion 1 itemDef { offsetX 1 offsetX 2 } })"          },
-            {"width and widthPercent",                R"(menuDef { name "m" layoutVersion 1 itemDef { width 10 widthPercent 0.5 } })"    },
-            {"rect and offsetX",                      R"(menuDef { name "m" layoutVersion 1 itemDef { offsetX 1 rect 0 0 10 10 } })"     },
-            {"stretch anchor and width",              R"(menuDef { name "m" layoutVersion 1 itemDef { width 10 anchor stretch top } })"  },
-            {"width and stretch anchor",              R"(menuDef { name "m" layoutVersion 1 itemDef { anchor left stretch height 10 } })"},
-            {"compact property without compactBelow", R"(menuDef { name "m" layoutVersion 1 itemDef { compactWidth 10 } })"              },
-            {"invalid horizontal anchor",             R"(menuDef { name "m" layoutVersion 1 itemDef { anchor top top } })"               },
-            {"invalid layout space",                  R"(menuDef { name "m" layoutVersion 1 layoutSpace wide })"                         },
-            {"invalid flow",                          R"(menuDef { name "m" layoutVersion 1 itemDef { flow diagonal } })"                },
-            {"invalid fit",                           R"(menuDef { name "m" layoutVersion 1 itemDef { fit fill } })"                     },
-            {"three padding values",                  R"(menuDef { name "m" layoutVersion 1 itemDef { padding 1 2 3 } })"                },
-            {"one aspect ratio value",                R"(menuDef { name "m" layoutVersion 1 itemDef { aspectRatio 16 } })"               },
-            {"zero aspect ratio value",               R"(menuDef { name "m" layoutVersion 1 itemDef { aspectRatio 16 0 } })"             },
-            {"negative width",                        R"(menuDef { name "m" layoutVersion 1 itemDef { width -1 } })"                     },
-            {"wrap value",                            R"(menuDef { name "m" layoutVersion 1 itemDef { wrap 2 } })"                       },
-            {"zero compactBelow",                     R"(menuDef { name "m" layoutVersion 1 itemDef { compactBelow 0 } })"               },
-            {"repeated clipChildren",                 R"(menuDef { name "m" layoutVersion 1 itemDef { clipChildren clipChildren } })"    },
-            {"menu motion without layoutVersion",     R"(menuDef { name "m" motion snappy })"                                            },
-            {"item motion without layoutVersion",     R"(menuDef { name "m" itemDef { motion snappy } })"                                },
-            {"focus offset without layoutVersion",    R"(menuDef { name "m" itemDef { focusOffsetX 4 } })"                               },
-            {"repeated menu motion",                  R"(menuDef { name "m" layoutVersion 1 motion snappy motion smooth })"              },
-            {"repeated item motion",                  R"(menuDef { name "m" layoutVersion 1 itemDef { motion none motion smooth } })"    },
-            {"invalid motion",                        R"(menuDef { name "m" layoutVersion 1 itemDef { motion bouncy } })"                },
-            {"preset motion with values",             R"(menuDef { name "m" layoutVersion 1 itemDef { motion smooth 2 1 0 } })"          },
-            {"response with two values",              R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 1 } })"          },
-            {"response with an integrator",           R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 1 rk4 } })"      },
-            {"spring without an integrator",          R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 } })"         },
-            {"spring with three values",              R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 0 } })"       },
-            {"invalid integrator",                    R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 verlet } })"  },
-            {"zero response frequency",               R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 0 1 0 } })"        },
-            {"negative response damping",             R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 -1 0 } })"       },
-            {"zero spring stiffness",                 R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 0 20 rk4 } })"       },
-            {"negative spring damping",               R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 -1 rk4 } })"     },
-            {"enterOpacity above 1",                  R"(menuDef { name "m" layoutVersion 1 itemDef { enterOpacity 1.5 } })"             },
-            {"negative enterOpacity",                 R"(menuDef { name "m" layoutVersion 1 itemDef { enterOpacity -0.5 } })"            },
-            {"repeated focusOffsetY",                 R"(menuDef { name "m" layoutVersion 1 itemDef { focusOffsetY 1 focusOffsetY 2 } })"},
-            {"exitOpacity above 1",                   R"(menuDef { name "m" layoutVersion 1 itemDef { exitOpacity 2 } })"                },
-            {"negative enterDelay",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterDelay -1 } })"                },
-            {"exitDelay before enterDelay",           R"(menuDef { name "m" layoutVersion 1 itemDef { exitDelay 1 enterDelay 2 } })"     },
-            {"exitDelay without layoutVersion",       R"(menuDef { name "m" itemDef { exitDelay 1 } })"                                  },
-            {"perspective without layoutVersion",     R"(menuDef { name "m" perspective 800 })"                                          },
-            {"zero perspective",                      R"(menuDef { name "m" layoutVersion 1 perspective 0 })"                            },
-            {"repeated perspective",                  R"(menuDef { name "m" layoutVersion 1 perspective 800 perspective 900 })"          },
-            {"light without layoutVersion",           R"(menuDef { name "m" light 0 0 1 })"                                              },
-            {"light without a direction",             R"(menuDef { name "m" layoutVersion 1 light 0 0 0 })"                              },
-            {"light with two values",                 R"(menuDef { name "m" layoutVersion 1 light 0 1 })"                                },
-            {"repeated light",                        R"(menuDef { name "m" layoutVersion 1 light 0 0 1 light 0 1 0 })"                  },
-            {"shade above 1",                         R"(menuDef { name "m" layoutVersion 1 itemDef { shade 1.5 } })"                    },
-            {"repeated shade",                        R"(menuDef { name "m" layoutVersion 1 itemDef { shade 0.5 shade 0.5 } })"          },
-            {"repeated backfaceHidden",               R"(menuDef { name "m" layoutVersion 1 itemDef { backfaceHidden backfaceHidden } })"},
-            {"negative radius",                       R"(menuDef { name "m" layoutVersion 1 itemDef { radius -1 } })"                    },
-            {"repeated radius",                       R"(menuDef { name "m" layoutVersion 1 itemDef { radius 4 radius 4 } })"            },
-            {"radius without layoutVersion",          R"(menuDef { name "m" itemDef { radius 4 } })"                                     },
-            {"rotateY without layoutVersion",         R"(menuDef { name "m" itemDef { rotateY 90 } })"                                   },
-            {"repeated enterScale",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterScale 0 enterScale 1 } })"    },
+            {"layout property without layoutVersion", R"(menuDef { name "m" itemDef { anchor left top } })"                                },
+            {"layoutSpace without layoutVersion",     R"(menuDef { name "m" layoutSpace safe })"                                           },
+            {"unsupported layoutVersion",             R"(menuDef { name "m" layoutVersion 2 })"                                            },
+            {"layoutVersion after itemDef",           R"(menuDef { name "m" itemDef { } layoutVersion 1 })"                                },
+            {"rect alignment",                        R"(menuDef { name "m" layoutVersion 1 itemDef { rect 0 0 10 10 1 1 } })"             },
+            {"origin",                                R"(menuDef { name "m" layoutVersion 1 itemDef { origin 4 4 } })"                     },
+            {"rect expression",                       R"(menuDef { name "m" layoutVersion 1 itemDef { exp rect X(4) } })"                  },
+            {"repeated property",                     R"(menuDef { name "m" layoutVersion 1 itemDef { offsetX 1 offsetX 2 } })"            },
+            {"width and widthPercent",                R"(menuDef { name "m" layoutVersion 1 itemDef { width 10 widthPercent 0.5 } })"      },
+            {"rect and offsetX",                      R"(menuDef { name "m" layoutVersion 1 itemDef { offsetX 1 rect 0 0 10 10 } })"       },
+            {"stretch anchor and width",              R"(menuDef { name "m" layoutVersion 1 itemDef { width 10 anchor stretch top } })"    },
+            {"width and stretch anchor",              R"(menuDef { name "m" layoutVersion 1 itemDef { anchor left stretch height 10 } })"  },
+            {"compact property without compactBelow", R"(menuDef { name "m" layoutVersion 1 itemDef { compactWidth 10 } })"                },
+            {"invalid horizontal anchor",             R"(menuDef { name "m" layoutVersion 1 itemDef { anchor top top } })"                 },
+            {"invalid layout space",                  R"(menuDef { name "m" layoutVersion 1 layoutSpace wide })"                           },
+            {"invalid flow",                          R"(menuDef { name "m" layoutVersion 1 itemDef { flow diagonal } })"                  },
+            {"invalid fit",                           R"(menuDef { name "m" layoutVersion 1 itemDef { fit fill } })"                       },
+            {"three padding values",                  R"(menuDef { name "m" layoutVersion 1 itemDef { padding 1 2 3 } })"                  },
+            {"one aspect ratio value",                R"(menuDef { name "m" layoutVersion 1 itemDef { aspectRatio 16 } })"                 },
+            {"zero aspect ratio value",               R"(menuDef { name "m" layoutVersion 1 itemDef { aspectRatio 16 0 } })"               },
+            {"negative width",                        R"(menuDef { name "m" layoutVersion 1 itemDef { width -1 } })"                       },
+            {"wrap value",                            R"(menuDef { name "m" layoutVersion 1 itemDef { wrap 2 } })"                         },
+            {"zero compactBelow",                     R"(menuDef { name "m" layoutVersion 1 itemDef { compactBelow 0 } })"                 },
+            {"repeated clipChildren",                 R"(menuDef { name "m" layoutVersion 1 itemDef { clipChildren clipChildren } })"      },
+            {"menu motion without layoutVersion",     R"(menuDef { name "m" motion snappy })"                                              },
+            {"item motion without layoutVersion",     R"(menuDef { name "m" itemDef { motion snappy } })"                                  },
+            {"focus offset without layoutVersion",    R"(menuDef { name "m" itemDef { focusOffsetX 4 } })"                                 },
+            {"repeated menu motion",                  R"(menuDef { name "m" layoutVersion 1 motion snappy motion smooth })"                },
+            {"repeated item motion",                  R"(menuDef { name "m" layoutVersion 1 itemDef { motion none motion smooth } })"      },
+            {"invalid motion",                        R"(menuDef { name "m" layoutVersion 1 itemDef { motion bouncy } })"                  },
+            {"preset motion with values",             R"(menuDef { name "m" layoutVersion 1 itemDef { motion smooth 2 1 0 } })"            },
+            {"response with two values",              R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 1 } })"            },
+            {"response with an integrator",           R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 1 rk4 } })"        },
+            {"spring without an integrator",          R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 } })"           },
+            {"spring with three values",              R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 0 } })"         },
+            {"invalid integrator",                    R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 verlet } })"    },
+            {"zero response frequency",               R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 0 1 0 } })"          },
+            {"negative response damping",             R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 -1 0 } })"         },
+            {"zero spring stiffness",                 R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 0 20 rk4 } })"         },
+            {"negative spring damping",               R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 -1 rk4 } })"       },
+            {"enterOpacity above 1",                  R"(menuDef { name "m" layoutVersion 1 itemDef { enterOpacity 1.5 } })"               },
+            {"negative enterOpacity",                 R"(menuDef { name "m" layoutVersion 1 itemDef { enterOpacity -0.5 } })"              },
+            {"repeated focusOffsetY",                 R"(menuDef { name "m" layoutVersion 1 itemDef { focusOffsetY 1 focusOffsetY 2 } })"  },
+            {"exitOpacity above 1",                   R"(menuDef { name "m" layoutVersion 1 itemDef { exitOpacity 2 } })"                  },
+            {"negative enterDelay",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterDelay -1 } })"                  },
+            {"exitDelay before enterDelay",           R"(menuDef { name "m" layoutVersion 1 itemDef { exitDelay 1 enterDelay 2 } })"       },
+            {"exitDelay without layoutVersion",       R"(menuDef { name "m" itemDef { exitDelay 1 } })"                                    },
+            {"perspective without layoutVersion",     R"(menuDef { name "m" perspective 800 })"                                            },
+            {"zero perspective",                      R"(menuDef { name "m" layoutVersion 1 perspective 0 })"                              },
+            {"repeated perspective",                  R"(menuDef { name "m" layoutVersion 1 perspective 800 perspective 900 })"            },
+            {"light without layoutVersion",           R"(menuDef { name "m" light 0 0 1 })"                                                },
+            {"light without a direction",             R"(menuDef { name "m" layoutVersion 1 light 0 0 0 })"                                },
+            {"light with two values",                 R"(menuDef { name "m" layoutVersion 1 light 0 1 })"                                  },
+            {"repeated light",                        R"(menuDef { name "m" layoutVersion 1 light 0 0 1 light 0 1 0 })"                    },
+            {"shade above 1",                         R"(menuDef { name "m" layoutVersion 1 itemDef { shade 1.5 } })"                      },
+            {"repeated shade",                        R"(menuDef { name "m" layoutVersion 1 itemDef { shade 0.5 shade 0.5 } })"            },
+            {"repeated backfaceHidden",               R"(menuDef { name "m" layoutVersion 1 itemDef { backfaceHidden backfaceHidden } })"  },
+            {"negative radius",                       R"(menuDef { name "m" layoutVersion 1 itemDef { radius -1 } })"                      },
+            {"repeated radius",                       R"(menuDef { name "m" layoutVersion 1 itemDef { radius 4 radius 4 } })"              },
+            {"radius without layoutVersion",          R"(menuDef { name "m" itemDef { radius 4 } })"                                       },
+            {"scene with too few values",             R"(menuDef { name "m" layoutVersion 1 itemDef { scene "mp_rust" 1 2 } })"            },
+            {"scene with too many values",            R"(menuDef { name "m" layoutVersion 1 itemDef { scene "mp_rust" 1 2 3 4 5 } })"      },
+            {"scene with zero size",                  R"(menuDef { name "m" layoutVersion 1 itemDef { scene "mp_rust" 1 2 3 0 } })"        },
+            {"scene without map",                     R"(menuDef { name "m" layoutVersion 1 itemDef { scene "" 1 2 3 } })"                 },
+            {"repeated scene",                        R"(menuDef { name "m" layoutVersion 1 itemDef { scene "a" 0 0 0 scene "a" 0 0 0 } })"},
+            {"scene without layoutVersion",           R"(menuDef { name "m" itemDef { scene "mp_rust" 0 0 0 } })"                          },
+            {"rotateY without layoutVersion",         R"(menuDef { name "m" itemDef { rotateY 90 } })"                                     },
+            {"repeated enterScale",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterScale 0 enterScale 1 } })"      },
         }));
 
         INFO(description);
