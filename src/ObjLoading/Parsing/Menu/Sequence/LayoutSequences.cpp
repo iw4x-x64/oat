@@ -627,6 +627,21 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
             SetOnce(state->m_current_menu->m_layout_perspective, EnsurePositive(value, pos, "perspective"), pos, "perspective");
         }));
 
+    // The direction the light comes from, which must have one
+    sequences.emplace_back(std::make_unique<SequenceNumbers>(
+        "light",
+        [](const MenuFileParserState* state, const TokenPos& pos, const std::span<const double> values)
+        {
+            LayoutSequences::EnsureIsLayoutMenu(state, pos);
+
+            if (values.size() != 3u)
+                throw ParsingException(pos, std::format("Layout property \"light\" takes 3 values instead of {}", values.size()));
+            if (values[0] == 0 && values[1] == 0 && values[2] == 0)
+                throw ParsingException(pos, "Layout property \"light\" must have a direction");
+
+            SetOnce(state->m_current_menu->m_layout_light, std::array{values[0], values[1], values[2]}, pos, "light");
+        }));
+
     return sequences;
 }
 
@@ -658,6 +673,27 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
 
                                                                                 layout.m_clip_children = true;
                                                                             }));
+
+    sequences.emplace_back(std::make_unique<GenericKeywordPropertySequence>("backfaceHidden",
+                                                                            [](const MenuFileParserState* state, const TokenPos& pos)
+                                                                            {
+                                                                                auto& layout = CurrentItemLayout(state, pos);
+                                                                                if (layout.m_backface_hidden)
+                                                                                    throw ParsingException(
+                                                                                        pos, "Layout property \"backfaceHidden\" has already been set");
+
+                                                                                layout.m_backface_hidden = true;
+                                                                            }));
+
+    sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>("shade",
+                                                                                  [](const MenuFileParserState* state, const TokenPos& pos, const double value)
+                                                                                  {
+                                                                                      if (value < 0 || value > 1)
+                                                                                          throw ParsingException(
+                                                                                              pos, "Layout property \"shade\" must be from 0 to 1");
+
+                                                                                      SetOnce(CurrentItemLayout(state, pos).m_shade, value, pos, "shade");
+                                                                                  }));
 
     sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>(
         "compactBelow",

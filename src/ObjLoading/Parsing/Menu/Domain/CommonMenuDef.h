@@ -6,6 +6,7 @@
 #include "EventHandler/CommonEventHandlerSet.h"
 #include "Parsing/Simple/Expression/ISimpleExpression.h"
 
+#include <array>
 #include <map>
 #include <memory>
 #include <optional>
@@ -67,6 +68,7 @@ namespace menu
         std::optional<LayoutSpace> m_layout_space;
         std::optional<LayoutMotion> m_layout_motion;
         std::optional<double> m_layout_perspective;
+        std::optional<std::array<double, 3>> m_layout_light;
 
         std::vector<std::unique_ptr<CommonItemDef>> m_items;
     };

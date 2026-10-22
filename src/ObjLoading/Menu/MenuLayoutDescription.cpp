@@ -162,6 +162,9 @@ namespace
             if (menu.m_layout_perspective)
                 m_stream << std::format("perspective {}\n", *menu.m_layout_perspective);
 
+            if (menu.m_layout_light)
+                m_stream << std::format("light {} {} {}\n", (*menu.m_layout_light)[0], (*menu.m_layout_light)[1], (*menu.m_layout_light)[2]);
+
             for (auto i = 0uz; i < menu.m_items.size(); i++)
                 WriteItem(i, *menu.m_items[i]);
         }
@@ -183,6 +186,12 @@ namespace
 
             if (layout.m_clip_children)
                 m_stream << "clipChildren\n";
+
+            if (layout.m_backface_hidden)
+                m_stream << "backfaceHidden\n";
+
+            if (layout.m_shade)
+                m_stream << std::format("shade {}\n", *layout.m_shade);
 
             if (layout.m_compact_below)
                 m_stream << std::format("compactBelow {}\n", *layout.m_compact_below);

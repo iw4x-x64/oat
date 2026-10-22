@@ -125,6 +125,10 @@ namespace menu
         std::optional<double> m_compact_below;
         bool m_clip_children = false;
 
+        // Whether the item is hidden while it shows its back, and the brightness it keeps facing away from the menu's light if it is lit
+        bool m_backface_hidden = false;
+        std::optional<double> m_shade;
+
         // The motion of the item, the menu's if absent, its pose in space, the state it enters from, the state it moves to while it has focus
         // and the state it exits to, with the delays in seconds after the menu opens at which it enters and exits
         std::optional<LayoutMotion> m_motion;

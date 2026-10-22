@@ -417,6 +417,50 @@ exitRotateY 90
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Writes the lighting and surfaces of a layout menu", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "solid"
+		layoutVersion 1
+		perspective 1200
+		light -1 -2 3
+		itemDef
+		{
+			name "face"
+			shade 0.25
+			backfaceHidden
+		}
+		itemDef
+		{
+			name "plain"
+			shade 1
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/solid") == R"(layoutVersion 1
+menu "solid" 2
+perspective 1200
+light -1 -2 3
+
+item 0 "face"
+backfaceHidden
+shade 0.25
+
+item 1 "plain"
+shade 1
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
     {
         const auto [description, menu] = GENERATE(table<const char*, const char*>({
@@ -470,6 +514,13 @@ exitRotateY 90
             {"perspective without layoutVersion",     R"(menuDef { name "m" perspective 800 })"                                          },
             {"zero perspective",                      R"(menuDef { name "m" layoutVersion 1 perspective 0 })"                            },
             {"repeated perspective",                  R"(menuDef { name "m" layoutVersion 1 perspective 800 perspective 900 })"          },
+            {"light without layoutVersion",           R"(menuDef { name "m" light 0 0 1 })"                                              },
+            {"light without a direction",             R"(menuDef { name "m" layoutVersion 1 light 0 0 0 })"                              },
+            {"light with two values",                 R"(menuDef { name "m" layoutVersion 1 light 0 1 })"                                },
+            {"repeated light",                        R"(menuDef { name "m" layoutVersion 1 light 0 0 1 light 0 1 0 })"                  },
+            {"shade above 1",                         R"(menuDef { name "m" layoutVersion 1 itemDef { shade 1.5 } })"                    },
+            {"repeated shade",                        R"(menuDef { name "m" layoutVersion 1 itemDef { shade 0.5 shade 0.5 } })"          },
+            {"repeated backfaceHidden",               R"(menuDef { name "m" layoutVersion 1 itemDef { backfaceHidden backfaceHidden } })"},
             {"rotateY without layoutVersion",         R"(menuDef { name "m" itemDef { rotateY 90 } })"                                   },
             {"repeated enterScale",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterScale 0 enterScale 1 } })"    },
         }));
