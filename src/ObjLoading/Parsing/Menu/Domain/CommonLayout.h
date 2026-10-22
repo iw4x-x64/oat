@@ -129,6 +129,9 @@ namespace menu
         bool m_backface_hidden = false;
         std::optional<double> m_shade;
 
+        // The radius of the item's rounded corners, square if absent
+        std::optional<double> m_radius;
+
         // The motion of the item, the menu's if absent, its pose in space, the state it enters from, the state it moves to while it has focus
         // and the state it exits to, with the delays in seconds after the menu opens at which it enters and exits
         std::optional<LayoutMotion> m_motion;

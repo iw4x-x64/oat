@@ -193,6 +193,9 @@ namespace
             if (layout.m_shade)
                 m_stream << std::format("shade {}\n", *layout.m_shade);
 
+            if (layout.m_radius)
+                m_stream << std::format("radius {}\n", *layout.m_radius);
+
             if (layout.m_compact_below)
                 m_stream << std::format("compactBelow {}\n", *layout.m_compact_below);
 

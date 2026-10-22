@@ -461,6 +461,42 @@ shade 1
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Writes the corner radius of layout items", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "rounded"
+		layoutVersion 1
+		itemDef
+		{
+			name "card"
+			radius 12.5
+		}
+		itemDef
+		{
+			name "square"
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/rounded") == R"(layoutVersion 1
+menu "rounded" 2
+
+item 0 "card"
+radius 12.5
+
+item 1 "square"
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
     {
         const auto [description, menu] = GENERATE(table<const char*, const char*>({
@@ -521,6 +557,9 @@ shade 1
             {"shade above 1",                         R"(menuDef { name "m" layoutVersion 1 itemDef { shade 1.5 } })"                    },
             {"repeated shade",                        R"(menuDef { name "m" layoutVersion 1 itemDef { shade 0.5 shade 0.5 } })"          },
             {"repeated backfaceHidden",               R"(menuDef { name "m" layoutVersion 1 itemDef { backfaceHidden backfaceHidden } })"},
+            {"negative radius",                       R"(menuDef { name "m" layoutVersion 1 itemDef { radius -1 } })"                    },
+            {"repeated radius",                       R"(menuDef { name "m" layoutVersion 1 itemDef { radius 4 radius 4 } })"            },
+            {"radius without layoutVersion",          R"(menuDef { name "m" itemDef { radius 4 } })"                                     },
             {"rotateY without layoutVersion",         R"(menuDef { name "m" itemDef { rotateY 90 } })"                                   },
             {"repeated enterScale",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterScale 0 enterScale 1 } })"    },
         }));

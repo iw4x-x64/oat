@@ -695,6 +695,16 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
                                                                                       SetOnce(CurrentItemLayout(state, pos).m_shade, value, pos, "shade");
                                                                                   }));
 
+    sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>("radius",
+                                                                                  [](const MenuFileParserState* state, const TokenPos& pos, const double value)
+                                                                                  {
+                                                                                      if (value < 0)
+                                                                                          throw ParsingException(
+                                                                                              pos, "Layout property \"radius\" must not be negative");
+
+                                                                                      SetOnce(CurrentItemLayout(state, pos).m_radius, value, pos, "radius");
+                                                                                  }));
+
     sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>(
         "compactBelow",
         [](const MenuFileParserState* state, const TokenPos& pos, const double value)
