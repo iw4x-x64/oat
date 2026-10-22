@@ -62,6 +62,18 @@ namespace
         {"tiled",   LayoutFit::TILED  },
     };
 
+    constexpr Spelling<LayoutMotionPreset> MOTION_PRESET_SPELLINGS[]{
+        {"none",    LayoutMotionPreset::NONE   },
+        {"snappy",  LayoutMotionPreset::SNAPPY },
+        {"smooth",  LayoutMotionPreset::SMOOTH },
+        {"springy", LayoutMotionPreset::SPRINGY},
+    };
+
+    constexpr Spelling<LayoutIntegrator> INTEGRATOR_SPELLINGS[]{
+        {"euler", LayoutIntegrator::EULER},
+        {"rk4",   LayoutIntegrator::RK4  },
+    };
+
     template<typename T> T ParseSpelling(const std::span<const Spelling<T>> spellings, const SimpleParserValue& token, const char* what)
     {
         const auto& value = MenuMatcherFactory::TokenTextValue(token);
@@ -274,6 +286,94 @@ namespace
             }
 
             SetOnce(CurrentProperties(state, firstToken.GetPos(), m_set).m_wrap, value, firstToken.GetPos(), name);
+        }
+    };
+
+    // Matches motion followed by a preset, by response and its frequency, damping and response, or by spring and its stiffness, damping
+    // and integrator
+    class SequenceMotion final : public MenuFileParser::sequence_t
+    {
+    public:
+        using callback_t = std::function<void(MenuFileParserState* state, const TokenPos& pos, LayoutMotion motion)>;
+
+    private:
+        static constexpr auto TAG_PARAMETERS = 1;
+        static constexpr auto TAG_RESPONSE = 2;
+        static constexpr auto CAPTURE_FIRST_TOKEN = 1;
+        static constexpr auto CAPTURE_KIND = 2;
+        static constexpr auto CAPTURE_INTEGRATOR = 3;
+
+        const callback_t m_set_callback;
+
+    public:
+        explicit SequenceMotion(callback_t setCallback)
+            : m_set_callback(std::move(setCallback))
+        {
+            const MenuMatcherFactory create(this);
+
+            AddLabeledMatchers(MenuExpressionMatchers().Expression(this), MenuExpressionMatchers::LABEL_EXPRESSION);
+            AddMatchers({
+                create.KeywordIgnoreCase("motion").Capture(CAPTURE_FIRST_TOKEN),
+                create.Identifier().Capture(CAPTURE_KIND),
+                create.Optional(create
+                                    .And({
+                                        create.NumericExpression(),
+                                        create.NumericExpression(),
+                                        create.Or({
+                                            create.NumericExpression().Tag(TAG_RESPONSE),
+                                            create.Identifier().Capture(CAPTURE_INTEGRATOR),
+                                        }),
+                                    })
+                                    .Tag(TAG_PARAMETERS)),
+            });
+        }
+
+    protected:
+        void ProcessMatch(MenuFileParserState* state, SequenceResult<SimpleParserValue>& result) const override
+        {
+            const auto& firstToken = result.NextCapture(CAPTURE_FIRST_TOKEN);
+            const auto& kindToken = result.NextCapture(CAPTURE_KIND);
+            const auto& kind = MenuMatcherFactory::TokenTextValue(kindToken);
+
+            const auto response = utils::StringEqualsIgnoreCase(kind, "response");
+            const auto spring = utils::StringEqualsIgnoreCase(kind, "spring");
+
+            if (result.PeekAndRemoveIfTag(TAG_PARAMETERS) != TAG_PARAMETERS)
+            {
+                if (response || spring)
+                    throw ParsingException(kindToken.GetPos(),
+                                           std::format("Motion \"{}\" takes {}", kind, response ? "3 values" : "2 values and an integrator"));
+
+                m_set_callback(state, firstToken.GetPos(), ParseSpelling<LayoutMotionPreset>(MOTION_PRESET_SPELLINGS, kindToken, "motion"));
+                return;
+            }
+
+            const auto first = MenuMatcherFactory::TokenNumericExpressionValue(state, result);
+            const auto second = MenuMatcherFactory::TokenNumericExpressionValue(state, result);
+
+            if (result.PeekAndRemoveIfTag(TAG_RESPONSE) == TAG_RESPONSE)
+            {
+                const auto third = MenuMatcherFactory::TokenNumericExpressionValue(state, result);
+                if (!response)
+                    throw ParsingException(kindToken.GetPos(), std::format("Motion \"{}\" does not take 3 values", kind));
+
+                m_set_callback(state,
+                               firstToken.GetPos(),
+                               LayoutResponse{EnsurePositive(first, firstToken.GetPos(), "motion frequency"),
+                                              EnsureNonNegative(second, firstToken.GetPos(), "motion damping"),
+                                              third});
+                return;
+            }
+
+            const auto& integratorToken = result.NextCapture(CAPTURE_INTEGRATOR);
+            if (!spring)
+                throw ParsingException(kindToken.GetPos(), std::format("Motion \"{}\" does not take an integrator", kind));
+
+            m_set_callback(state,
+                           firstToken.GetPos(),
+                           LayoutSpring{EnsurePositive(first, firstToken.GetPos(), "spring stiffness"),
+                                        EnsureNonNegative(second, firstToken.GetPos(), "spring damping"),
+                                        ParseSpelling<LayoutIntegrator>(INTEGRATOR_SPELLINGS, integratorToken, "integrator")});
         }
     };
 
@@ -503,6 +603,13 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
             SetOnce(state->m_current_menu->m_layout_space, ParseSpelling<LayoutSpace>(SPACE_SPELLINGS, *values[0], "layout space"), pos, "layoutSpace");
         }));
 
+    sequences.emplace_back(std::make_unique<SequenceMotion>(
+        [](const MenuFileParserState* state, const TokenPos& pos, LayoutMotion motion)
+        {
+            LayoutSequences::EnsureIsLayoutMenu(state, pos);
+            SetOnce(state->m_current_menu->m_layout_motion, std::move(motion), pos, "motion");
+        }));
+
     return sequences;
 }
 
@@ -541,6 +648,35 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
         {
             SetOnce(CurrentItemLayout(state, pos).m_compact_below, EnsurePositive(value, pos, "compactBelow"), pos, "compactBelow");
         }));
+
+    sequences.emplace_back(std::make_unique<SequenceMotion>(
+        [](const MenuFileParserState* state, const TokenPos& pos, LayoutMotion motion)
+        {
+            SetOnce(CurrentItemLayout(state, pos).m_motion, std::move(motion), pos, "motion");
+        }));
+
+    // The enter and focus states, of which only the opacity is bounded
+    const std::pair<const char*, std::optional<double> CommonItemLayout::*> states[]{
+        {"enterOffsetX", &CommonItemLayout::m_enter_offset_x},
+        {"enterOffsetY", &CommonItemLayout::m_enter_offset_y},
+        {"enterOpacity", &CommonItemLayout::m_enter_opacity },
+        {"focusOffsetX", &CommonItemLayout::m_focus_offset_x},
+        {"focusOffsetY", &CommonItemLayout::m_focus_offset_y},
+    };
+
+    for (const auto& [keyword, member] : states)
+    {
+        const auto opacity = member == &CommonItemLayout::m_enter_opacity;
+        sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>(
+            keyword,
+            [keyword, member, opacity](const MenuFileParserState* state, const TokenPos& pos, const double value)
+            {
+                if (opacity && (value < 0 || value > 1))
+                    throw ParsingException(pos, std::format("Layout property \"{}\" must be from 0 to 1", keyword));
+
+                SetOnce(CurrentItemLayout(state, pos).*member, value, pos, keyword);
+            }));
+    }
 
     for (const auto& set : PROPERTY_SETS)
         AddPropertySetSequences(sequences, set);

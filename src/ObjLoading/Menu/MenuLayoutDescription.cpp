@@ -79,6 +79,50 @@ namespace
         return "";
     }
 
+    const char* MotionPresetName(const LayoutMotionPreset preset)
+    {
+        switch (preset)
+        {
+        case LayoutMotionPreset::NONE:
+            return "none";
+        case LayoutMotionPreset::SNAPPY:
+            return "snappy";
+        case LayoutMotionPreset::SMOOTH:
+            return "smooth";
+        case LayoutMotionPreset::SPRINGY:
+            return "springy";
+        }
+
+        assert(false);
+        return "";
+    }
+
+    const char* IntegratorName(const LayoutIntegrator integrator)
+    {
+        switch (integrator)
+        {
+        case LayoutIntegrator::EULER:
+            return "euler";
+        case LayoutIntegrator::RK4:
+            return "rk4";
+        }
+
+        assert(false);
+        return "";
+    }
+
+    std::string MotionStatement(const LayoutMotion& motion)
+    {
+        if (const auto* preset = std::get_if<LayoutMotionPreset>(&motion))
+            return std::format("motion {}\n", MotionPresetName(*preset));
+
+        if (const auto* response = std::get_if<LayoutResponse>(&motion))
+            return std::format("motion response {} {} {}\n", response->m_frequency, response->m_damping, response->m_response);
+
+        const auto& spring = std::get<LayoutSpring>(motion);
+        return std::format("motion spring {} {} {}\n", spring.m_stiffness, spring.m_damping, IntegratorName(spring.m_integrator));
+    }
+
     std::string Quoted(const std::string& value)
     {
         std::string result("\"");
@@ -112,6 +156,9 @@ namespace
             if (menu.m_layout_space)
                 m_stream << std::format("layoutSpace {}\n", SpaceName(*menu.m_layout_space));
 
+            if (menu.m_layout_motion)
+                m_stream << MotionStatement(*menu.m_layout_motion);
+
             for (auto i = 0uz; i < menu.m_items.size(); i++)
                 WriteItem(i, *menu.m_items[i]);
         }
@@ -138,6 +185,23 @@ namespace
                 m_stream << std::format("compactBelow {}\n", *layout.m_compact_below);
 
             WriteProperties(layout.m_compact, "compact");
+
+            if (layout.m_motion)
+                m_stream << MotionStatement(*layout.m_motion);
+
+            const std::pair<const char*, const std::optional<double>&> states[]{
+                {"enterOffsetX", layout.m_enter_offset_x},
+                {"enterOffsetY", layout.m_enter_offset_y},
+                {"enterOpacity", layout.m_enter_opacity },
+                {"focusOffsetX", layout.m_focus_offset_x},
+                {"focusOffsetY", layout.m_focus_offset_y},
+            };
+
+            for (const auto& [property, value] : states)
+            {
+                if (value)
+                    m_stream << std::format("{} {}\n", property, *value);
+            }
         }
 
         void WriteProperties(const CommonLayoutProperties& properties, const std::string& prefix)

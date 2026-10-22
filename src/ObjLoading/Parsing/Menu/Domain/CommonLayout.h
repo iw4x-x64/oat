@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <variant>
 
 namespace menu
 {
@@ -60,6 +61,37 @@ namespace menu
         double m_height;
     };
 
+    // The motion that moves an item to where it is placed and to its focus offsets: a preset, a second-order response or a damped spring
+    enum class LayoutMotionPreset : std::uint8_t
+    {
+        NONE,
+        SNAPPY,
+        SMOOTH,
+        SPRINGY
+    };
+
+    struct LayoutResponse
+    {
+        double m_frequency;
+        double m_damping;
+        double m_response;
+    };
+
+    enum class LayoutIntegrator : std::uint8_t
+    {
+        EULER,
+        RK4
+    };
+
+    struct LayoutSpring
+    {
+        double m_stiffness;
+        double m_damping;
+        LayoutIntegrator m_integrator;
+    };
+
+    using LayoutMotion = std::variant<LayoutMotionPreset, LayoutResponse, LayoutSpring>;
+
     class CommonLayoutProperties
     {
     public:
@@ -92,5 +124,13 @@ namespace menu
         CommonLayoutProperties m_compact;
         std::optional<double> m_compact_below;
         bool m_clip_children = false;
+
+        // The motion of the item, the menu's if absent, and the state it enters from and moves to while it has focus
+        std::optional<LayoutMotion> m_motion;
+        std::optional<double> m_enter_offset_x;
+        std::optional<double> m_enter_offset_y;
+        std::optional<double> m_enter_opacity;
+        std::optional<double> m_focus_offset_x;
+        std::optional<double> m_focus_offset_y;
     };
 } // namespace menu
