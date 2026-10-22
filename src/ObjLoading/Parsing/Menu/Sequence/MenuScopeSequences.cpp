@@ -8,6 +8,7 @@
 #include "Generic/GenericKeywordPropertySequence.h"
 #include "Generic/GenericMenuEventHandlerSetPropertySequence.h"
 #include "Generic/GenericStringPropertySequence.h"
+#include "LayoutSequences.h"
 #include "Parsing/Menu/Domain/CommonMenuTypes.h"
 #include "Parsing/Menu/Matcher/MenuExpressionMatchers.h"
 #include "Parsing/Menu/Matcher/MenuMatcherFactory.h"
@@ -473,6 +474,12 @@ void MenuScopeSequences::AddSequences(const FeatureLevel featureLevel, const boo
             {
                 return state->m_current_menu->m_on_focus_due_to_close;
             }));
+    }
+
+    if (featureLevel == FeatureLevel::IW4MS)
+    {
+        for (auto& sequence : LayoutSequences::CreateMenuSequences())
+            AddSequence(std::move(sequence));
     }
 
     AddSequence(std::make_unique<SequenceConsumeSemicolons>());

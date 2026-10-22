@@ -7,6 +7,7 @@
 #include "Generic/GenericKeywordPropertySequence.h"
 #include "Generic/GenericMenuEventHandlerSetPropertySequence.h"
 #include "Generic/GenericStringPropertySequence.h"
+#include "LayoutSequences.h"
 #include "Parsing/Menu/Matcher/MenuExpressionMatchers.h"
 #include "Parsing/Menu/Matcher/MenuMatcherFactory.h"
 #include "Parsing/Menu/MenuFileCommonOperations.h"
@@ -179,19 +180,23 @@ namespace
 
     class SequenceCloseBlock final : public MenuFileParser::sequence_t
     {
+        static constexpr auto CAPTURE_TOKEN = 1;
+
     public:
         SequenceCloseBlock()
         {
             const MenuMatcherFactory create(this);
 
             AddMatchers({
-                create.Char('}'),
+                create.Char('}').Capture(CAPTURE_TOKEN),
             });
         }
 
     protected:
         void ProcessMatch(MenuFileParserState* state, SequenceResult<SimpleParserValue>& result) const override
         {
+            LayoutSequences::EnsureCompactPropertiesHaveThreshold(state, result.NextCapture(CAPTURE_TOKEN).GetPos());
+
             state->m_current_item = nullptr;
         }
     };
@@ -215,6 +220,7 @@ namespace
     class SequenceRect final : public MenuFileParser::sequence_t
     {
         static constexpr auto TAG_ALIGN = 1;
+        static constexpr auto CAPTURE_FIRST_TOKEN = 1;
 
     public:
         SequenceRect()
@@ -223,7 +229,7 @@ namespace
 
             AddLabeledMatchers(MenuExpressionMatchers().Expression(this), MenuExpressionMatchers::LABEL_EXPRESSION);
             AddMatchers({
-                create.KeywordIgnoreCase("rect"),
+                create.KeywordIgnoreCase("rect").Capture(CAPTURE_FIRST_TOKEN),
                 create.NumericExpression(), // x
                 create.NumericExpression(), // y
                 create.NumericExpression(), // w
@@ -242,11 +248,21 @@ namespace
         {
             assert(state->m_current_item);
 
+            const auto& pos = result.NextCapture(CAPTURE_FIRST_TOKEN).GetPos();
             const auto x = MenuMatcherFactory::TokenNumericExpressionValue(state, result);
             const auto y = MenuMatcherFactory::TokenNumericExpressionValue(state, result);
             const auto w = MenuMatcherFactory::TokenNumericExpressionValue(state, result);
             const auto h = MenuMatcherFactory::TokenNumericExpressionValue(state, result);
             CommonRect rect{x, y, w, h, 0, 0};
+
+            // In a layout menu the rect is shorthand for the offsets and the fixed size, and the alignment is up to the layout space
+            if (state->m_current_menu->m_layout_version)
+            {
+                if (result.PeekTag() == TAG_ALIGN)
+                    throw ParsingException(pos, "Rect alignment is not supported in layout menus, use layoutSpace and anchor");
+
+                LayoutSequences::SetRect(state, pos, x, y, w, h);
+            }
 
             if (result.PeekAndRemoveIfTag(TAG_ALIGN) == TAG_ALIGN)
             {
@@ -260,6 +276,8 @@ namespace
 
     class SequenceOrigin final : public MenuFileParser::sequence_t
     {
+        static constexpr auto CAPTURE_FIRST_TOKEN = 1;
+
     public:
         SequenceOrigin()
         {
@@ -267,7 +285,7 @@ namespace
 
             AddLabeledMatchers(MenuExpressionMatchers().Expression(this), MenuExpressionMatchers::LABEL_EXPRESSION);
             AddMatchers({
-                create.KeywordIgnoreCase("origin"),
+                create.KeywordIgnoreCase("origin").Capture(CAPTURE_FIRST_TOKEN),
                 create.NumericExpression(), // x
                 create.NumericExpression(), // y
             });
@@ -277,6 +295,9 @@ namespace
         void ProcessMatch(MenuFileParserState* state, SequenceResult<SimpleParserValue>& result) const override
         {
             assert(state->m_current_item);
+
+            if (state->m_current_menu->m_layout_version)
+                throw ParsingException(result.NextCapture(CAPTURE_FIRST_TOKEN).GetPos(), "Origin is not supported in layout menus, use offsetX and offsetY");
 
             state->m_current_item->m_rect.x += MenuMatcherFactory::TokenNumericExpressionValue(state, result);
             state->m_current_item->m_rect.y += MenuMatcherFactory::TokenNumericExpressionValue(state, result);
@@ -947,6 +968,7 @@ void ItemScopeSequences::AddSequences(const FeatureLevel featureLevel, const boo
                                                         [](const MenuFileParserState* state, const TokenPos& pos, std::unique_ptr<ISimpleExpression> value)
                                                         {
                                                             MenuFileCommonOperations::EnsureIsNumericExpression(state, pos, *value);
+                                                            LayoutSequences::EnsureIsNotLayoutMenu(state, pos, "Rect expressions");
                                                             state->m_current_item->m_rect_x_exp = std::move(value);
                                                         }));
     AddSequence(
@@ -954,6 +976,7 @@ void ItemScopeSequences::AddSequences(const FeatureLevel featureLevel, const boo
                                                         [](const MenuFileParserState* state, const TokenPos& pos, std::unique_ptr<ISimpleExpression> value)
                                                         {
                                                             MenuFileCommonOperations::EnsureIsNumericExpression(state, pos, *value);
+                                                            LayoutSequences::EnsureIsNotLayoutMenu(state, pos, "Rect expressions");
                                                             state->m_current_item->m_rect_y_exp = std::move(value);
                                                         }));
     AddSequence(
@@ -961,6 +984,7 @@ void ItemScopeSequences::AddSequences(const FeatureLevel featureLevel, const boo
                                                         [](const MenuFileParserState* state, const TokenPos& pos, std::unique_ptr<ISimpleExpression> value)
                                                         {
                                                             MenuFileCommonOperations::EnsureIsNumericExpression(state, pos, *value);
+                                                            LayoutSequences::EnsureIsNotLayoutMenu(state, pos, "Rect expressions");
                                                             state->m_current_item->m_rect_w_exp = std::move(value);
                                                         }));
     AddSequence(
@@ -968,6 +992,7 @@ void ItemScopeSequences::AddSequences(const FeatureLevel featureLevel, const boo
                                                         [](const MenuFileParserState* state, const TokenPos& pos, std::unique_ptr<ISimpleExpression> value)
                                                         {
                                                             MenuFileCommonOperations::EnsureIsNumericExpression(state, pos, *value);
+                                                            LayoutSequences::EnsureIsNotLayoutMenu(state, pos, "Rect expressions");
                                                             state->m_current_item->m_rect_h_exp = std::move(value);
                                                         }));
     AddSequence(
@@ -1260,6 +1285,12 @@ void ItemScopeSequences::AddSequences(const FeatureLevel featureLevel, const boo
                                                                  ItemScopeOperations::EnsureHasNewsTickerFeatures(*state->m_current_item, pos);
                                                                  state->m_current_item->m_news_ticker_features->m_news_feed_id = value;
                                                              }));
+
+    if (featureLevel == FeatureLevel::IW4MS)
+    {
+        for (auto& sequence : LayoutSequences::CreateItemSequences())
+            AddSequence(std::move(sequence));
+    }
 
     AddSequence(std::make_unique<SequenceConsumeSemicolons>());
 }
