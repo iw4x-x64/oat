@@ -125,12 +125,18 @@ namespace menu
         std::optional<double> m_compact_below;
         bool m_clip_children = false;
 
-        // The motion of the item, the menu's if absent, and the state it enters from and moves to while it has focus
+        // The motion of the item, the menu's if absent, the state it enters from, the state it moves to while it has focus and the state it
+        // exits to, with the delays in seconds after the menu opens at which it enters and exits
         std::optional<LayoutMotion> m_motion;
         std::optional<double> m_enter_offset_x;
         std::optional<double> m_enter_offset_y;
         std::optional<double> m_enter_opacity;
+        std::optional<double> m_enter_delay;
         std::optional<double> m_focus_offset_x;
         std::optional<double> m_focus_offset_y;
+        std::optional<double> m_exit_offset_x;
+        std::optional<double> m_exit_offset_y;
+        std::optional<double> m_exit_opacity;
+        std::optional<double> m_exit_delay;
     };
 } // namespace menu

@@ -191,7 +191,9 @@ namespace
     protected:
         void ProcessMatch(MenuFileParserState* state, SequenceResult<SimpleParserValue>& result) const override
         {
-            LayoutSequences::EnsureCompactPropertiesHaveThreshold(state, result.NextCapture(CAPTURE_TOKEN).GetPos());
+            const auto& pos = result.NextCapture(CAPTURE_TOKEN).GetPos();
+            LayoutSequences::EnsureCompactPropertiesHaveThreshold(state, pos);
+            LayoutSequences::EnsureExitFollowsEnter(state, pos);
 
             state->m_current_item = nullptr;
         }

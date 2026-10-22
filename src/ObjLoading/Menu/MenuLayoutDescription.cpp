@@ -193,8 +193,13 @@ namespace
                 {"enterOffsetX", layout.m_enter_offset_x},
                 {"enterOffsetY", layout.m_enter_offset_y},
                 {"enterOpacity", layout.m_enter_opacity },
+                {"enterDelay",   layout.m_enter_delay   },
                 {"focusOffsetX", layout.m_focus_offset_x},
                 {"focusOffsetY", layout.m_focus_offset_y},
+                {"exitOffsetX",  layout.m_exit_offset_x },
+                {"exitOffsetY",  layout.m_exit_offset_y },
+                {"exitOpacity",  layout.m_exit_opacity  },
+                {"exitDelay",    layout.m_exit_delay    },
             };
 
             for (const auto& [property, value] : states)

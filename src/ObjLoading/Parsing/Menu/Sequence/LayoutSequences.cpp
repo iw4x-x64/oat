@@ -551,6 +551,15 @@ void LayoutSequences::EnsureCompactPropertiesHaveThreshold(const MenuFileParserS
         throw ParsingException(pos, "Compact layout properties require compactBelow");
 }
 
+void LayoutSequences::EnsureExitFollowsEnter(const MenuFileParserState* state, const TokenPos& pos)
+{
+    assert(state->m_current_item);
+
+    const auto& layout = state->m_current_item->m_layout;
+    if (layout.m_exit_delay && *layout.m_exit_delay < layout.m_enter_delay.value_or(0))
+        throw ParsingException(pos, "Layout property \"exitDelay\" must not be less than enterDelay");
+}
+
 void LayoutSequences::SetRect(const MenuFileParserState* state, const TokenPos& pos, const double x, const double y, const double w, const double h)
 {
     const auto& set = NORMAL_PROPERTY_SET;
@@ -655,26 +664,56 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
             SetOnce(CurrentItemLayout(state, pos).m_motion, std::move(motion), pos, "motion");
         }));
 
-    // The enter and focus states, of which only the opacity is bounded
-    const std::pair<const char*, std::optional<double> CommonItemLayout::*> states[]{
-        {"enterOffsetX", &CommonItemLayout::m_enter_offset_x},
-        {"enterOffsetY", &CommonItemLayout::m_enter_offset_y},
-        {"enterOpacity", &CommonItemLayout::m_enter_opacity },
-        {"focusOffsetX", &CommonItemLayout::m_focus_offset_x},
-        {"focusOffsetY", &CommonItemLayout::m_focus_offset_y},
+    // The enter, focus and exit states: offsets, which may be anything, opacities, which go from 0 to 1, and delays, which are never negative
+    enum class StateValue : std::uint8_t
+    {
+        OFFSET,
+        OPACITY,
+        DELAY
     };
 
-    for (const auto& [keyword, member] : states)
+    struct StateProperty
     {
-        const auto opacity = member == &CommonItemLayout::m_enter_opacity;
-        sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>(
-            keyword,
-            [keyword, member, opacity](const MenuFileParserState* state, const TokenPos& pos, const double value)
-            {
-                if (opacity && (value < 0 || value > 1))
-                    throw ParsingException(pos, std::format("Layout property \"{}\" must be from 0 to 1", keyword));
+        const char* m_keyword;
+        std::optional<double> CommonItemLayout::* m_member;
+        StateValue m_value;
+    };
 
-                SetOnce(CurrentItemLayout(state, pos).*member, value, pos, keyword);
+    constexpr StateProperty states[]{
+        {"enterOffsetX", &CommonItemLayout::m_enter_offset_x, StateValue::OFFSET },
+        {"enterOffsetY", &CommonItemLayout::m_enter_offset_y, StateValue::OFFSET },
+        {"enterOpacity", &CommonItemLayout::m_enter_opacity,  StateValue::OPACITY},
+        {"enterDelay",   &CommonItemLayout::m_enter_delay,    StateValue::DELAY  },
+        {"focusOffsetX", &CommonItemLayout::m_focus_offset_x, StateValue::OFFSET },
+        {"focusOffsetY", &CommonItemLayout::m_focus_offset_y, StateValue::OFFSET },
+        {"exitOffsetX",  &CommonItemLayout::m_exit_offset_x,  StateValue::OFFSET },
+        {"exitOffsetY",  &CommonItemLayout::m_exit_offset_y,  StateValue::OFFSET },
+        {"exitOpacity",  &CommonItemLayout::m_exit_opacity,   StateValue::OPACITY},
+        {"exitDelay",    &CommonItemLayout::m_exit_delay,     StateValue::DELAY  },
+    };
+
+    for (const auto& property : states)
+    {
+        sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>(
+            property.m_keyword,
+            [property](const MenuFileParserState* state, const TokenPos& pos, const double value)
+            {
+                switch (property.m_value)
+                {
+                case StateValue::OFFSET:
+                    break;
+
+                case StateValue::OPACITY:
+                    if (value < 0 || value > 1)
+                        throw ParsingException(pos, std::format("Layout property \"{}\" must be from 0 to 1", property.m_keyword));
+                    break;
+
+                case StateValue::DELAY:
+                    EnsureNonNegative(value, pos, property.m_keyword);
+                    break;
+                }
+
+                SetOnce(CurrentItemLayout(state, pos).*property.m_member, value, pos, property.m_keyword);
             }));
     }
 

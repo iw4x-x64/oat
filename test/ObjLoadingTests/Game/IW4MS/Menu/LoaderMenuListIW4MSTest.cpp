@@ -289,6 +289,54 @@ motion springy
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Writes the timeline of a layout menu", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "timeline"
+		layoutVersion 1
+		itemDef
+		{
+			name "title"
+			exitDelay 6.5
+			enterOpacity 0
+			enterDelay 0.75
+			exitOffsetY -40
+			exitOpacity 0
+		}
+		itemDef
+		{
+			name "rule"
+			exitOffsetX 1920
+			exitDelay 0
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/timeline") == R"(layoutVersion 1
+menu "timeline" 2
+
+item 0 "title"
+enterOpacity 0
+enterDelay 0.75
+exitOffsetY -40
+exitOpacity 0
+exitDelay 6.5
+
+item 1 "rule"
+exitOffsetX 1920
+exitDelay 0
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
     {
         const auto [description, menu] = GENERATE(table<const char*, const char*>({
@@ -335,6 +383,10 @@ motion springy
             {"enterOpacity above 1",                  R"(menuDef { name "m" layoutVersion 1 itemDef { enterOpacity 1.5 } })"             },
             {"negative enterOpacity",                 R"(menuDef { name "m" layoutVersion 1 itemDef { enterOpacity -0.5 } })"            },
             {"repeated focusOffsetY",                 R"(menuDef { name "m" layoutVersion 1 itemDef { focusOffsetY 1 focusOffsetY 2 } })"},
+            {"exitOpacity above 1",                   R"(menuDef { name "m" layoutVersion 1 itemDef { exitOpacity 2 } })"                },
+            {"negative enterDelay",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterDelay -1 } })"                },
+            {"exitDelay before enterDelay",           R"(menuDef { name "m" layoutVersion 1 itemDef { exitDelay 1 enterDelay 2 } })"     },
+            {"exitDelay without layoutVersion",       R"(menuDef { name "m" itemDef { exitDelay 1 } })"                                  },
         }));
 
         INFO(description);

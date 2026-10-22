@@ -19,6 +19,9 @@ namespace menu
         // Throws if the current item has compact layout properties without compactBelow
         static void EnsureCompactPropertiesHaveThreshold(const MenuFileParserState* state, const TokenPos& pos);
 
+        // Throws if the current item exits before it enters
+        static void EnsureExitFollowsEnter(const MenuFileParserState* state, const TokenPos& pos);
+
         // Sets the offsets and the fixed size of the current item from its rect, which in a layout menu is shorthand for them
         static void SetRect(const MenuFileParserState* state, const TokenPos& pos, double x, double y, double w, double h);
 
