@@ -764,6 +764,16 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
                                                                                 layout.m_clip_children = true;
                                                                             }));
 
+    sequences.emplace_back(std::make_unique<GenericKeywordPropertySequence>("fitText",
+                                                                            [](const MenuFileParserState* state, const TokenPos& pos)
+                                                                            {
+                                                                                auto& layout = CurrentItemLayout(state, pos);
+                                                                                if (layout.m_fit_text)
+                                                                                    throw ParsingException(pos, "Layout property \"fitText\" has already been set");
+
+                                                                                layout.m_fit_text = true;
+                                                                            }));
+
     sequences.emplace_back(std::make_unique<GenericKeywordPropertySequence>("backfaceHidden",
                                                                             [](const MenuFileParserState* state, const TokenPos& pos)
                                                                             {

@@ -135,6 +135,7 @@ namespace menu
         CommonLayoutProperties m_compact;
         std::optional<double> m_compact_below;
         bool m_clip_children = false;
+        bool m_fit_text = false;
 
         // Whether the item is hidden while it shows its back, and the brightness it keeps facing away from the menu's light if it is lit
         bool m_backface_hidden = false;

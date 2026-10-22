@@ -118,6 +118,7 @@ namespace test::game::iw4ms::menu::parsing::it
 			itemSpacing 24
 			wrap
 			clipChildren
+			fitText
 			compactBelow 1800
 			compactWidthPercent 1.0
 			compactPadding 24 12
@@ -171,6 +172,7 @@ flow vertical
 itemSpacing 24
 wrap 1
 clipChildren
+fitText
 compactBelow 1800
 compactWidthPercent 1
 compactPadding 24 12 24 12
@@ -604,6 +606,7 @@ tether "tag_reflex" "tag_sight_on"
             {"wrap value",                            R"(menuDef { name "m" layoutVersion 1 itemDef { wrap 2 } })"                         },
             {"zero compactBelow",                     R"(menuDef { name "m" layoutVersion 1 itemDef { compactBelow 0 } })"                 },
             {"repeated clipChildren",                 R"(menuDef { name "m" layoutVersion 1 itemDef { clipChildren clipChildren } })"      },
+            {"repeated fitText",                      R"(menuDef { name "m" layoutVersion 1 itemDef { fitText fitText } })"                },
             {"menu motion without layoutVersion",     R"(menuDef { name "m" motion snappy })"                                              },
             {"item motion without layoutVersion",     R"(menuDef { name "m" itemDef { motion snappy } })"                                  },
             {"focus offset without layoutVersion",    R"(menuDef { name "m" itemDef { focusOffsetX 4 } })"                                 },

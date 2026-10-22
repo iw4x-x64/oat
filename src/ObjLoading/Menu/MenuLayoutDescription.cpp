@@ -187,6 +187,9 @@ namespace
             if (layout.m_clip_children)
                 m_stream << "clipChildren\n";
 
+            if (layout.m_fit_text)
+                m_stream << "fitText\n";
+
             if (layout.m_backface_hidden)
                 m_stream << "backfaceHidden\n";
 
