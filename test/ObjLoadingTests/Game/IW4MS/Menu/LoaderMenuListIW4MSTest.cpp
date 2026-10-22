@@ -535,6 +535,46 @@ scene "mp_rust" 0 0 0 12.5
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Writes the subject and tethers of layout items", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "gunsmith"
+		layoutVersion 1
+		itemDef
+		{
+			name "world"
+			scene "mp_rust" 0 0 0 8
+			subject "weapon"
+		}
+		itemDef
+		{
+			name "optic"
+			tether "tag_reflex tag_sight_on"
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/gunsmith") == R"(layoutVersion 1
+menu "gunsmith" 2
+
+item 0 "world"
+scene "mp_rust" 0 0 0 8
+subject "weapon"
+
+item 1 "optic"
+tether "tag_reflex" "tag_sight_on"
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
     {
         const auto [description, menu] = GENERATE(table<const char*, const char*>({
@@ -604,6 +644,12 @@ scene "mp_rust" 0 0 0 12.5
             {"scene without map",                     R"(menuDef { name "m" layoutVersion 1 itemDef { scene "" 1 2 3 } })"                 },
             {"repeated scene",                        R"(menuDef { name "m" layoutVersion 1 itemDef { scene "a" 0 0 0 scene "a" 0 0 0 } })"},
             {"scene without layoutVersion",           R"(menuDef { name "m" itemDef { scene "mp_rust" 0 0 0 } })"                          },
+            {"empty subject",                         R"(menuDef { name "m" layoutVersion 1 itemDef { subject "" } })"                     },
+            {"repeated subject",                      R"(menuDef { name "m" layoutVersion 1 itemDef { subject "a" subject "a" } })"        },
+            {"subject without layoutVersion",         R"(menuDef { name "m" itemDef { subject "weapon" } })"                               },
+            {"empty tether",                          R"(menuDef { name "m" layoutVersion 1 itemDef { tether " " } })"                     },
+            {"repeated tether",                       R"(menuDef { name "m" layoutVersion 1 itemDef { tether "a" tether "b" } })"          },
+            {"tether without layoutVersion",          R"(menuDef { name "m" itemDef { tether "tag_flash" } })"                             },
             {"rotateY without layoutVersion",         R"(menuDef { name "m" itemDef { rotateY 90 } })"                                     },
             {"repeated enterScale",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterScale 0 enterScale 1 } })"      },
         }));

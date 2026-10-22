@@ -5,6 +5,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 namespace menu
 {
@@ -142,8 +143,12 @@ namespace menu
         // The radius of the item's rounded corners, square if absent
         std::optional<double> m_radius;
 
-        // The map the item stands for, if any
+        // The map the item stands for, if any, and what stands in it
         std::optional<LayoutScene> m_scene;
+        std::optional<std::string> m_subject;
+
+        // The tags of the subject the item is tethered to, the first one the subject has counting, not tethered if empty
+        std::vector<std::string> m_tether;
 
         // The motion of the item, the menu's if absent, its pose in space, the state it enters from, the state it moves to while it has focus
         // and the state it exits to, with the delays in seconds after the menu opens at which it enters and exits

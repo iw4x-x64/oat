@@ -205,6 +205,17 @@ namespace
                 m_stream << "\n";
             }
 
+            if (layout.m_subject)
+                m_stream << std::format("subject \"{}\"\n", *layout.m_subject);
+
+            if (!layout.m_tether.empty())
+            {
+                m_stream << "tether";
+                for (const auto& tag : layout.m_tether)
+                    m_stream << std::format(" \"{}\"", tag);
+                m_stream << "\n";
+            }
+
             if (layout.m_compact_below)
                 m_stream << std::format("compactBelow {}\n", *layout.m_compact_below);
 

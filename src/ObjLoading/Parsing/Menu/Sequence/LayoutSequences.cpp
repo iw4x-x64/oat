@@ -13,6 +13,7 @@
 #include <format>
 #include <functional>
 #include <span>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -294,6 +295,46 @@ namespace
                 scene.m_size = EnsurePositive(values[3], pos, "scene size");
 
             SetOnce(CurrentItemLayout(state, pos).m_scene, std::move(scene), pos, "scene");
+        }
+    };
+
+    // Matches tether followed by the tag names, separated by spaces in one string since the lexer joins adjacent strings
+    class SequenceTether final : public MenuFileParser::sequence_t
+    {
+        static constexpr auto CAPTURE_FIRST_TOKEN = 1;
+        static constexpr auto CAPTURE_TAGS = 2;
+
+    public:
+        SequenceTether()
+        {
+            const MenuMatcherFactory create(this);
+
+            AddMatchers({
+                create.KeywordIgnoreCase("tether").Capture(CAPTURE_FIRST_TOKEN),
+                create.Text().Capture(CAPTURE_TAGS),
+            });
+        }
+
+    protected:
+        void ProcessMatch(MenuFileParserState* state, SequenceResult<SimpleParserValue>& result) const override
+        {
+            const auto& firstToken = result.NextCapture(CAPTURE_FIRST_TOKEN);
+            const auto& tagsToken = result.NextCapture(CAPTURE_TAGS);
+            const auto& pos = firstToken.GetPos();
+
+            std::vector<std::string> tags;
+            std::istringstream stream(MenuMatcherFactory::TokenTextValue(tagsToken));
+            for (std::string tag; stream >> tag;)
+                tags.emplace_back(std::move(tag));
+
+            if (tags.empty())
+                throw ParsingException(tagsToken.GetPos(), "Layout property \"tether\" must name tags");
+
+            auto& layout = CurrentItemLayout(state, pos);
+            if (!layout.m_tether.empty())
+                throw ParsingException(pos, "Layout property \"tether\" has already been set");
+
+            layout.m_tether = std::move(tags);
         }
     };
 
@@ -755,6 +796,17 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
                                                                                   }));
 
     sequences.emplace_back(std::make_unique<SequenceScene>());
+    sequences.emplace_back(std::make_unique<SequenceTether>());
+
+    sequences.emplace_back(std::make_unique<GenericStringPropertySequence>("subject",
+                                                                           [](const MenuFileParserState* state, const TokenPos& pos, const std::string& value)
+                                                                           {
+                                                                               if (value.empty())
+                                                                                   throw ParsingException(pos,
+                                                                                                          "Layout property \"subject\" must name a subject");
+
+                                                                               SetOnce(CurrentItemLayout(state, pos).m_subject, value, pos, "subject");
+                                                                           }));
 
     sequences.emplace_back(std::make_unique<GenericFloatingPointPropertySequence>(
         "compactBelow",
