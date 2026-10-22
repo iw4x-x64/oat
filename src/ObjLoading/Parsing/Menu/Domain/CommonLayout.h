@@ -130,12 +130,16 @@ namespace menu
         std::optional<LayoutMotion> m_motion;
         std::optional<double> m_enter_offset_x;
         std::optional<double> m_enter_offset_y;
+        std::optional<double> m_enter_size_x;
+        std::optional<double> m_enter_size_y;
         std::optional<double> m_enter_opacity;
         std::optional<double> m_enter_delay;
         std::optional<double> m_focus_offset_x;
         std::optional<double> m_focus_offset_y;
         std::optional<double> m_exit_offset_x;
         std::optional<double> m_exit_offset_y;
+        std::optional<double> m_exit_size_x;
+        std::optional<double> m_exit_size_y;
         std::optional<double> m_exit_opacity;
         std::optional<double> m_exit_delay;
     };

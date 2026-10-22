@@ -664,7 +664,8 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
             SetOnce(CurrentItemLayout(state, pos).m_motion, std::move(motion), pos, "motion");
         }));
 
-    // The enter, focus and exit states: offsets, which may be anything, opacities, which go from 0 to 1, and delays, which are never negative
+    // The enter, focus and exit states: offsets of the position or the size, which may be anything, opacities, which go from 0 to 1, and delays, which are
+    // never negative
     enum class StateValue : std::uint8_t
     {
         OFFSET,
@@ -682,12 +683,16 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
     constexpr StateProperty states[]{
         {"enterOffsetX", &CommonItemLayout::m_enter_offset_x, StateValue::OFFSET },
         {"enterOffsetY", &CommonItemLayout::m_enter_offset_y, StateValue::OFFSET },
+        {"enterSizeX",   &CommonItemLayout::m_enter_size_x,   StateValue::OFFSET },
+        {"enterSizeY",   &CommonItemLayout::m_enter_size_y,   StateValue::OFFSET },
         {"enterOpacity", &CommonItemLayout::m_enter_opacity,  StateValue::OPACITY},
         {"enterDelay",   &CommonItemLayout::m_enter_delay,    StateValue::DELAY  },
         {"focusOffsetX", &CommonItemLayout::m_focus_offset_x, StateValue::OFFSET },
         {"focusOffsetY", &CommonItemLayout::m_focus_offset_y, StateValue::OFFSET },
         {"exitOffsetX",  &CommonItemLayout::m_exit_offset_x,  StateValue::OFFSET },
         {"exitOffsetY",  &CommonItemLayout::m_exit_offset_y,  StateValue::OFFSET },
+        {"exitSizeX",    &CommonItemLayout::m_exit_size_x,    StateValue::OFFSET },
+        {"exitSizeY",    &CommonItemLayout::m_exit_size_y,    StateValue::OFFSET },
         {"exitOpacity",  &CommonItemLayout::m_exit_opacity,   StateValue::OPACITY},
         {"exitDelay",    &CommonItemLayout::m_exit_delay,     StateValue::DELAY  },
     };

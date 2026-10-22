@@ -192,12 +192,16 @@ namespace
             const std::pair<const char*, const std::optional<double>&> states[]{
                 {"enterOffsetX", layout.m_enter_offset_x},
                 {"enterOffsetY", layout.m_enter_offset_y},
+                {"enterSizeX",   layout.m_enter_size_x  },
+                {"enterSizeY",   layout.m_enter_size_y  },
                 {"enterOpacity", layout.m_enter_opacity },
                 {"enterDelay",   layout.m_enter_delay   },
                 {"focusOffsetX", layout.m_focus_offset_x},
                 {"focusOffsetY", layout.m_focus_offset_y},
                 {"exitOffsetX",  layout.m_exit_offset_x },
                 {"exitOffsetY",  layout.m_exit_offset_y },
+                {"exitSizeX",    layout.m_exit_size_x   },
+                {"exitSizeY",    layout.m_exit_size_y   },
                 {"exitOpacity",  layout.m_exit_opacity  },
                 {"exitDelay",    layout.m_exit_delay    },
             };

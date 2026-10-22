@@ -313,6 +313,8 @@ motion springy
 			name "rule"
 			exitOffsetX 1920
 			exitDelay 0
+			enterSizeX -400
+			exitSizeY 8
 		}
 	}
 }
@@ -332,7 +334,9 @@ exitOpacity 0
 exitDelay 6.5
 
 item 1 "rule"
+enterSizeX -400
 exitOffsetX 1920
+exitSizeY 8
 exitDelay 0
 )"s);
     }
