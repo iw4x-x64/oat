@@ -49,6 +49,18 @@ namespace test::game::iw4ms::menu::parsing::it
         {
             return m_zone.m_pools.GetAsset(ASSET_TYPE_RAWFILE, name) != nullptr;
         }
+
+        std::string GetRawFileText(const std::string& name)
+        {
+            const auto addedAsset = m_zone.m_pools.GetAsset(ASSET_TYPE_RAWFILE, name);
+            REQUIRE(addedAsset);
+
+            const auto* rawFile = static_cast<RawFile*>(addedAsset->m_ptr);
+            REQUIRE(rawFile->compressedLen == 0);
+            REQUIRE(rawFile->data.buffer);
+
+            return std::string(rawFile->data.buffer, static_cast<std::size_t>(rawFile->len));
+        }
     };
 
     TEST_CASE("MenuParsingIW4MSIT: Writes no layout description for a legacy menu", "[parsing][converting][menu][layout][it]")
@@ -72,6 +84,143 @@ namespace test::game::iw4ms::menu::parsing::it
         const auto result = helper.RunIntegrationTest();
         REQUIRE(result.HasBeenSuccessful());
         REQUIRE(!helper.HasRawFile("layout/Hello"));
+    }
+
+    TEST_CASE("MenuParsingIW4MSIT: Writes the layout description of a layout menu", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "main_menu"
+		layoutVersion 1
+		layoutSpace protected
+
+		itemDef
+		{
+			name "backdrop"
+			layoutSpace full
+			anchor stretch stretch
+			fit cover
+		}
+
+		itemDef
+		{
+			name "panel"
+			layoutSpace safe
+			anchor center center
+			width 1120
+			height 760
+			padding 48
+			flow vertical
+			itemSpacing 24
+			wrap
+			clipChildren
+			compactBelow 1800
+			compactWidthPercent 1.0
+			compactPadding 24 12
+			compactWrap 0
+		}
+
+		itemDef
+		{
+			name "title"
+			parent "panel"
+			rect 0 -8 400 80
+			maxWidth 960
+		}
+
+		itemDef
+		{
+			name "logo"
+			parent "backdrop"
+			anchor right bottom
+			offsetX -48
+			width 640
+			aspectRatio 16 9
+		}
+
+		itemDef
+		{
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/main_menu") == R"(layoutVersion 1
+menu "main_menu" 5
+layoutSpace protected
+
+item 0 "backdrop"
+layoutSpace full
+anchor stretch stretch
+fit cover
+
+item 1 "panel"
+layoutSpace safe
+anchor center center
+width 1120
+height 760
+padding 48 48 48 48
+flow vertical
+itemSpacing 24
+wrap 1
+clipChildren
+compactBelow 1800
+compactWidthPercent 1
+compactPadding 24 12 24 12
+compactWrap 0
+
+item 2 "title"
+parent "panel"
+offsetX 0
+offsetY -8
+width 400
+height 80
+maxWidth 960
+
+item 3 "logo"
+parent "backdrop"
+anchor right bottom
+offsetX -48
+width 640
+aspectRatio 16 9
+
+item 4 ""
+)"s);
+    }
+
+    TEST_CASE("MenuParsingIW4MSIT: Escapes names in the layout description", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "quote"
+		layoutVersion 1
+		itemDef
+		{
+			name "a\"b\\c"
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/quote") == R"(layoutVersion 1
+menu "quote" 1
+
+item 0 "a\"b\\c"
+)"s);
     }
 
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
