@@ -67,6 +67,7 @@ namespace menu
 
         std::optional<int> m_layout_version;
         std::optional<LayoutSpace> m_layout_space;
+        std::optional<LayoutMotion> m_layout_motion;
 
         std::vector<std::unique_ptr<CommonItemDef>> m_items;
     };

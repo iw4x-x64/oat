@@ -223,6 +223,72 @@ item 0 "a\"b\\c"
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Writes the motion of a layout menu", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "motion"
+		layoutVersion 1
+		motion snappy
+		itemDef
+		{
+			name "panel"
+			motion response 2.5 0.5 (0.5 + 0.5)
+			enterOffsetY 40
+			enterOpacity 0
+		}
+		itemDef
+		{
+			name "button"
+			motion spring 120 22 RK4
+			focusOffsetX 8
+			focusOffsetY -4
+		}
+		itemDef
+		{
+			name "label"
+			motion none
+			enterOffsetX -10
+		}
+		itemDef
+		{
+			name "plain"
+			motion springy
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/motion") == R"(layoutVersion 1
+menu "motion" 4
+motion snappy
+
+item 0 "panel"
+motion response 2.5 0.5 1
+enterOffsetY 40
+enterOpacity 0
+
+item 1 "button"
+motion spring 120 22 rk4
+focusOffsetX 8
+focusOffsetY -4
+
+item 2 "label"
+motion none
+enterOffsetX -10
+
+item 3 "plain"
+motion springy
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
     {
         const auto [description, menu] = GENERATE(table<const char*, const char*>({
@@ -250,6 +316,25 @@ item 0 "a\"b\\c"
             {"wrap value",                            R"(menuDef { name "m" layoutVersion 1 itemDef { wrap 2 } })"                       },
             {"zero compactBelow",                     R"(menuDef { name "m" layoutVersion 1 itemDef { compactBelow 0 } })"               },
             {"repeated clipChildren",                 R"(menuDef { name "m" layoutVersion 1 itemDef { clipChildren clipChildren } })"    },
+            {"menu motion without layoutVersion",     R"(menuDef { name "m" motion snappy })"                                            },
+            {"item motion without layoutVersion",     R"(menuDef { name "m" itemDef { motion snappy } })"                                },
+            {"focus offset without layoutVersion",    R"(menuDef { name "m" itemDef { focusOffsetX 4 } })"                               },
+            {"repeated menu motion",                  R"(menuDef { name "m" layoutVersion 1 motion snappy motion smooth })"              },
+            {"repeated item motion",                  R"(menuDef { name "m" layoutVersion 1 itemDef { motion none motion smooth } })"    },
+            {"invalid motion",                        R"(menuDef { name "m" layoutVersion 1 itemDef { motion bouncy } })"                },
+            {"preset motion with values",             R"(menuDef { name "m" layoutVersion 1 itemDef { motion smooth 2 1 0 } })"          },
+            {"response with two values",              R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 1 } })"          },
+            {"response with an integrator",           R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 1 rk4 } })"      },
+            {"spring without an integrator",          R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 } })"         },
+            {"spring with three values",              R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 0 } })"       },
+            {"invalid integrator",                    R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 20 verlet } })"  },
+            {"zero response frequency",               R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 0 1 0 } })"        },
+            {"negative response damping",             R"(menuDef { name "m" layoutVersion 1 itemDef { motion response 2 -1 0 } })"       },
+            {"zero spring stiffness",                 R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 0 20 rk4 } })"       },
+            {"negative spring damping",               R"(menuDef { name "m" layoutVersion 1 itemDef { motion spring 100 -1 rk4 } })"     },
+            {"enterOpacity above 1",                  R"(menuDef { name "m" layoutVersion 1 itemDef { enterOpacity 1.5 } })"             },
+            {"negative enterOpacity",                 R"(menuDef { name "m" layoutVersion 1 itemDef { enterOpacity -0.5 } })"            },
+            {"repeated focusOffsetY",                 R"(menuDef { name "m" layoutVersion 1 itemDef { focusOffsetY 1 focusOffsetY 2 } })"},
         }));
 
         INFO(description);
