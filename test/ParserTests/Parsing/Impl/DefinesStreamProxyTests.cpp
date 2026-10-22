@@ -897,6 +897,26 @@ namespace test::parsing::impl::defines_stream_proxy
         REQUIRE(proxy.Eof());
     }
 
+    TEST_CASE("DefinesStreamProxy: Macro arguments can be empty", "[parsing][parsingstream]")
+    {
+        const std::vector<std::string> lines{
+            "#define testMacro(a, b, c) [a|b|c]",
+            "testMacro(x, , z)",
+            "testMacro(x, y, )",
+            "testMacro(, , )",
+        };
+
+        MockParserLineStream mockStream(lines);
+        DefinesStreamProxy proxy(&mockStream);
+
+        ExpectLine(&proxy, 1, "");
+        ExpectLine(&proxy, 2, "[x||z]");
+        ExpectLine(&proxy, 3, "[x|y|]");
+        ExpectLine(&proxy, 4, "[||]");
+
+        REQUIRE(proxy.Eof());
+    }
+
     TEST_CASE("DefinesStreamProxy: Can use second macro after multi-line macro", "[parsing][parsingstream]")
     {
         const std::vector<std::string> lines{

@@ -931,12 +931,9 @@ void DefinesStreamProxy::ContinueMacroParameters(
                 state.m_parameter_state = ParameterState::AFTER_PARAM;
                 state.m_current_parameter << c;
             }
-            else if (state.m_parameter_state == ParameterState::AFTER_COMMA)
-            {
-                throw ParsingException(CreatePos(line, linePos), "Cannot close macro parameters after comma");
-            }
             else
             {
+                // As in C, an argument may be empty, the last one included
                 state.m_parameters.emplace_back(state.m_current_parameter.str());
                 state.m_parameter_state = ParameterState::NOT_IN_PARAMETERS;
             }
