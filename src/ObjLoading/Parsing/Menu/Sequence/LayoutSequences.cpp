@@ -55,6 +55,12 @@ namespace
         {"vertical",   LayoutFlow::VERTICAL  },
     };
 
+    constexpr Spelling<LayoutFlowAlign> FLOW_ALIGN_SPELLINGS[]{
+        {"start",  LayoutFlowAlign::START },
+        {"center", LayoutFlowAlign::CENTER},
+        {"end",    LayoutFlowAlign::END   },
+    };
+
     constexpr Spelling<LayoutScroll> SCROLL_SPELLINGS[]{
         {"horizontal", LayoutScroll::HORIZONTAL},
         {"vertical",   LayoutScroll::VERTICAL  },
@@ -607,6 +613,17 @@ namespace
             [set](const MenuFileParserState* state, const TokenPos& pos, const std::span<const SimpleParserValue* const> values)
             {
                 SetOnce(CurrentProperties(state, pos, set).m_flow, ParseSpelling<LayoutFlow>(FLOW_SPELLINGS, *values[0], "flow"), pos, set.Name("flow"));
+            }));
+
+        sequences.emplace_back(std::make_unique<SequenceIdentifiers>(
+            set.Name("flowAlign"),
+            1u,
+            [set](const MenuFileParserState* state, const TokenPos& pos, const std::span<const SimpleParserValue* const> values)
+            {
+                SetOnce(CurrentProperties(state, pos, set).m_flow_align,
+                        ParseSpelling<LayoutFlowAlign>(FLOW_ALIGN_SPELLINGS, *values[0], "flow alignment"),
+                        pos,
+                        set.Name("flowAlign"));
             }));
 
         sequences.emplace_back(std::make_unique<SequenceWrap>(set));

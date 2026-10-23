@@ -34,6 +34,14 @@ namespace menu
         VERTICAL
     };
 
+    // Where a flow's children are placed along it when they leave room
+    enum class LayoutFlowAlign : std::uint8_t
+    {
+        START,
+        CENTER,
+        END
+    };
+
     // The axis along which an item scrolls its children
     enum class LayoutScroll : std::uint8_t
     {
@@ -126,6 +134,7 @@ namespace menu
         std::optional<LayoutRatio> m_aspect_ratio;
         std::optional<LayoutInsets> m_padding;
         std::optional<LayoutFlow> m_flow;
+        std::optional<LayoutFlowAlign> m_flow_align;
         std::optional<double> m_item_spacing;
         std::optional<bool> m_wrap;
         std::optional<LayoutFit> m_fit;

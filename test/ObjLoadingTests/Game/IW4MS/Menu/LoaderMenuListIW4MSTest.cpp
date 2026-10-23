@@ -123,6 +123,7 @@ namespace test::game::iw4ms::menu::parsing::it
 			height 760
 			padding 48
 			flow vertical
+			flowAlign end
 			itemSpacing 24
 			wrap
 			clipChildren
@@ -131,6 +132,7 @@ namespace test::game::iw4ms::menu::parsing::it
 			compactWidthPercent 1.0
 			compactPadding 24 12
 			compactWrap 0
+			compactFlowAlign center
 		}
 
 		itemDef
@@ -177,6 +179,7 @@ width 1120
 height 760
 padding 48 48 48 48
 flow vertical
+flowAlign end
 itemSpacing 24
 wrap 1
 clipChildren
@@ -184,6 +187,7 @@ fitText
 compactBelow 1800
 compactWidthPercent 1
 compactPadding 24 12 24 12
+compactFlowAlign center
 compactWrap 0
 
 item 2 "title"

@@ -43,6 +43,22 @@ namespace
         return "";
     }
 
+    const char* FlowAlignName(const LayoutFlowAlign align)
+    {
+        switch (align)
+        {
+        case LayoutFlowAlign::START:
+            return "start";
+        case LayoutFlowAlign::CENTER:
+            return "center";
+        case LayoutFlowAlign::END:
+            return "end";
+        }
+
+        assert(false);
+        return "";
+    }
+
     const char* FlowName(const LayoutFlow flow)
     {
         switch (flow)
@@ -345,6 +361,9 @@ namespace
 
             if (properties.m_flow)
                 m_stream << std::format("{} {}\n", name("flow"), FlowName(*properties.m_flow));
+
+            if (properties.m_flow_align)
+                m_stream << std::format("{} {}\n", name("flowAlign"), FlowAlignName(*properties.m_flow_align));
 
             writeNumber(properties.m_item_spacing, "itemSpacing");
 
