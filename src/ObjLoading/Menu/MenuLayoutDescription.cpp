@@ -59,6 +59,20 @@ namespace
         return "";
     }
 
+    const char* ScrollName(const LayoutScroll scroll)
+    {
+        switch (scroll)
+        {
+        case LayoutScroll::HORIZONTAL:
+            return "horizontal";
+        case LayoutScroll::VERTICAL:
+            return "vertical";
+        }
+
+        assert(false);
+        return "";
+    }
+
     const char* FitName(const LayoutFit fit)
     {
         switch (fit)
@@ -189,6 +203,15 @@ namespace
 
             if (layout.m_fit_text)
                 m_stream << "fitText\n";
+
+            if (layout.m_scroll)
+                m_stream << std::format("scroll {}\n", ScrollName(*layout.m_scroll));
+
+            if (layout.m_scroll_thumb)
+                m_stream << std::format("scrollThumb {}\n", Quoted(*layout.m_scroll_thumb));
+
+            if (layout.m_virtual)
+                m_stream << std::format("virtual {}\n", Quoted(*layout.m_virtual));
 
             if (layout.m_backface_hidden)
                 m_stream << "backfaceHidden\n";

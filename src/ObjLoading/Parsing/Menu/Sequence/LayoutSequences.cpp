@@ -55,6 +55,11 @@ namespace
         {"vertical",   LayoutFlow::VERTICAL  },
     };
 
+    constexpr Spelling<LayoutScroll> SCROLL_SPELLINGS[]{
+        {"horizontal", LayoutScroll::HORIZONTAL},
+        {"vertical",   LayoutScroll::VERTICAL  },
+    };
+
     constexpr Spelling<LayoutFit> FIT_SPELLINGS[]{
         {"stretch", LayoutFit::STRETCH},
         {"contain", LayoutFit::CONTAIN},
@@ -773,6 +778,34 @@ std::vector<std::unique_ptr<MenuFileParser::sequence_t>> LayoutSequences::Create
 
                                                                                 layout.m_fit_text = true;
                                                                             }));
+
+    sequences.emplace_back(std::make_unique<SequenceIdentifiers>(
+        "scroll",
+        1u,
+        [](const MenuFileParserState* state, const TokenPos& pos, const std::span<const SimpleParserValue* const> values)
+        {
+            SetOnce(CurrentItemLayout(state, pos).m_scroll, ParseSpelling<LayoutScroll>(SCROLL_SPELLINGS, *values[0], "scroll"), pos, "scroll");
+        }));
+
+    sequences.emplace_back(std::make_unique<GenericStringPropertySequence>("scrollThumb",
+                                                                           [](const MenuFileParserState* state, const TokenPos& pos, const std::string& value)
+                                                                           {
+                                                                               if (value.empty())
+                                                                                   throw ParsingException(
+                                                                                       pos, "Layout property \"scrollThumb\" must name an item");
+
+                                                                               SetOnce(CurrentItemLayout(state, pos).m_scroll_thumb, value, pos, "scrollThumb");
+                                                                           }));
+
+    sequences.emplace_back(std::make_unique<GenericStringPropertySequence>("virtual",
+                                                                           [](const MenuFileParserState* state, const TokenPos& pos, const std::string& value)
+                                                                           {
+                                                                               if (value.empty())
+                                                                                   throw ParsingException(
+                                                                                       pos, "Layout property \"virtual\" must name a local variable");
+
+                                                                               SetOnce(CurrentItemLayout(state, pos).m_virtual, value, pos, "virtual");
+                                                                           }));
 
     sequences.emplace_back(std::make_unique<GenericKeywordPropertySequence>("backfaceHidden",
                                                                             [](const MenuFileParserState* state, const TokenPos& pos)

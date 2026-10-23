@@ -629,6 +629,60 @@ tether "tag_reflex" "tag_sight_on"
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Writes the scrolling of layout items", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "cards"
+		layoutVersion 1
+		itemDef
+		{
+			name "grid"
+			flow horizontal
+			wrap 1
+			scroll vertical
+			virtual "ui_first"
+		}
+		itemDef
+		{
+			name "thumb"
+			scrollThumb "grid"
+		}
+		itemDef
+		{
+			name "strip"
+			flow horizontal
+			scroll horizontal
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        REQUIRE(helper.GetRawFileText("layout/cards") == R"(layoutVersion 1
+menu "cards" 3
+
+item 0 "grid"
+flow horizontal
+wrap 1
+scroll vertical
+virtual "ui_first"
+
+item 1 "thumb"
+scrollThumb "grid"
+
+item 2 "strip"
+flow horizontal
+scroll horizontal
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Rejects invalid layout menus", "[parsing][converting][menu][layout][it]")
     {
         const auto [description, menu] = GENERATE(table<const char*, const char*>({
@@ -708,6 +762,13 @@ tether "tag_reflex" "tag_sight_on"
             {"tether without layoutVersion",          R"(menuDef { name "m" itemDef { tether "tag_flash" } })"                             },
             {"rotateY without layoutVersion",         R"(menuDef { name "m" itemDef { rotateY 90 } })"                                     },
             {"repeated enterScale",                   R"(menuDef { name "m" layoutVersion 1 itemDef { enterScale 0 enterScale 1 } })"      },
+            {"invalid scroll",                        R"(menuDef { name "m" layoutVersion 1 itemDef { scroll diagonal } })"                },
+            {"repeated scroll",                       R"(menuDef { name "m" layoutVersion 1 itemDef { scroll vertical scroll vertical } })"},
+            {"scroll without layoutVersion",          R"(menuDef { name "m" itemDef { scroll vertical } })"                                },
+            {"empty scrollThumb",                     R"(menuDef { name "m" layoutVersion 1 itemDef { scrollThumb "" } })"                 },
+            {"repeated scrollThumb",                  R"(menuDef { name "m" layoutVersion 1 itemDef { scrollThumb "a" scrollThumb "a" } })"},
+            {"empty virtual",                         R"(menuDef { name "m" layoutVersion 1 itemDef { virtual "" } })"                     },
+            {"repeated virtual",                      R"(menuDef { name "m" layoutVersion 1 itemDef { virtual "a" virtual "a" } })"        },
         }));
 
         INFO(description);

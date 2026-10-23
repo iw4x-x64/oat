@@ -34,6 +34,13 @@ namespace menu
         VERTICAL
     };
 
+    // The axis along which an item scrolls its children
+    enum class LayoutScroll : std::uint8_t
+    {
+        HORIZONTAL,
+        VERTICAL
+    };
+
     enum class LayoutFit : std::uint8_t
     {
         STRETCH,
@@ -136,6 +143,12 @@ namespace menu
         std::optional<double> m_compact_below;
         bool m_clip_children = false;
         bool m_fit_text = false;
+
+        // The axis the item scrolls its children along, if it does, the scrolling item whose thumb the item is, if it is one, and the local
+        // variable that the index of the first of the item's children is kept in, if its children stand for rows of a virtual area
+        std::optional<LayoutScroll> m_scroll;
+        std::optional<std::string> m_scroll_thumb;
+        std::optional<std::string> m_virtual;
 
         // Whether the item is hidden while it shows its back, and the brightness it keeps facing away from the menu's light if it is lit
         bool m_backface_hidden = false;
