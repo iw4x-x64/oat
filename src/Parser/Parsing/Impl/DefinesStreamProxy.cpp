@@ -7,6 +7,7 @@
 #include "Parsing/Simple/SimpleExpressionInterpreter.h"
 #include "Utils/StringUtils.h"
 
+#include <algorithm>
 #include <regex>
 #include <sstream>
 #include <utility>
@@ -881,8 +882,23 @@ void DefinesStreamProxy::ExpandMacro(ParserLine& line,
                                      const Define* macro,
                                      const std::vector<std::string>& parameterValues)
 {
+    // An argument with a token-pasting operator was written in the body of the macro calling this one,
+    // whose pasting would otherwise only happen after this expansion consumed the argument
+    std::vector<std::string> pastedValues;
+    const auto* values = &parameterValues;
+    if (std::ranges::any_of(parameterValues, [](const std::string& value) { return value.find("##") != std::string::npos; }))
+    {
+        pastedValues = parameterValues;
+        for (auto& value : pastedValues)
+        {
+            if (value.find("##") != std::string::npos)
+                ProcessTokenPastingOperators(line, linePos, value);
+        }
+        values = &pastedValues;
+    }
+
     std::ostringstream rawOutput;
-    InsertMacroParameters(rawOutput, macro, parameterValues);
+    InsertMacroParameters(rawOutput, macro, *values);
 
     std::string str = rawOutput.str();
     ProcessNestedMacros(line, linePos, callstack, str);
