@@ -976,12 +976,13 @@ void ItemScopeSequences::AddSequences(const FeatureLevel featureLevel, const boo
                                                             LayoutSequences::EnsureIsNotLayoutMenu(state, pos, "Rect expressions");
                                                             state->m_current_item->m_rect_y_exp = std::move(value);
                                                         }));
+    // Width and height expressions only size what is drawn inside the place a layout gives the item (the fill of a bar),
+    // so layout menus keep them, unlike position expressions, which would move the item out of its place.
     AddSequence(
         GenericExpressionPropertySequence::WithKeywords({"exp", "rect", "W"},
                                                         [](const MenuFileParserState* state, const TokenPos& pos, std::unique_ptr<ISimpleExpression> value)
                                                         {
                                                             MenuFileCommonOperations::EnsureIsNumericExpression(state, pos, *value);
-                                                            LayoutSequences::EnsureIsNotLayoutMenu(state, pos, "Rect expressions");
                                                             state->m_current_item->m_rect_w_exp = std::move(value);
                                                         }));
     AddSequence(
@@ -989,7 +990,6 @@ void ItemScopeSequences::AddSequences(const FeatureLevel featureLevel, const boo
                                                         [](const MenuFileParserState* state, const TokenPos& pos, std::unique_ptr<ISimpleExpression> value)
                                                         {
                                                             MenuFileCommonOperations::EnsureIsNumericExpression(state, pos, *value);
-                                                            LayoutSequences::EnsureIsNotLayoutMenu(state, pos, "Rect expressions");
                                                             state->m_current_item->m_rect_h_exp = std::move(value);
                                                         }));
     AddSequence(

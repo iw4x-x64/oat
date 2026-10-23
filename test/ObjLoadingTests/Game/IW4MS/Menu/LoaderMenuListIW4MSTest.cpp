@@ -45,6 +45,14 @@ namespace test::game::iw4ms::menu::parsing::it
             return m_asset_creator->CreateAsset(DEFAULT_ASSET_NAME, m_context);
         }
 
+        [[nodiscard]] const menuDef_t* GetMenu(const std::string& name) const
+        {
+            const auto addedAsset = m_zone.m_pools.GetAsset(ASSET_TYPE_MENU, name);
+            REQUIRE(addedAsset);
+
+            return static_cast<const menuDef_t*>(addedAsset->m_ptr);
+        }
+
         [[nodiscard]] bool HasRawFile(const std::string& name) const
         {
             return m_zone.m_pools.GetAsset(ASSET_TYPE_RAWFILE, name) != nullptr;
@@ -501,6 +509,48 @@ item 1 "square"
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Keeps width and height expressions of layout items", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "bars"
+		layoutVersion 1
+		itemDef
+		{
+			name "fill"
+			width 100
+			height 2
+			exp rect W(dvarfloat("progress") * 100)
+			exp rect H(dvarint("thick"))
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        const auto* menu = helper.GetMenu("bars");
+        REQUIRE(menu->itemCount == 1);
+
+        const auto* item = menu->items[0];
+        REQUIRE(item->floatExpressionCount == 2);
+        REQUIRE(item->floatExpressions[0].target == ITEM_FLOATEXP_TGT_RECT_W);
+        REQUIRE(item->floatExpressions[1].target == ITEM_FLOATEXP_TGT_RECT_H);
+
+        REQUIRE(helper.GetRawFileText("layout/bars") == R"(layoutVersion 1
+menu "bars" 1
+
+item 0 "fill"
+width 100
+height 2
+)"s);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Writes the map a layout item stands for", "[parsing][converting][menu][layout][it]")
     {
         MenuParsingItHelper helper;
@@ -588,7 +638,8 @@ tether "tag_reflex" "tag_sight_on"
             {"layoutVersion after itemDef",           R"(menuDef { name "m" itemDef { } layoutVersion 1 })"                                },
             {"rect alignment",                        R"(menuDef { name "m" layoutVersion 1 itemDef { rect 0 0 10 10 1 1 } })"             },
             {"origin",                                R"(menuDef { name "m" layoutVersion 1 itemDef { origin 4 4 } })"                     },
-            {"rect expression",                       R"(menuDef { name "m" layoutVersion 1 itemDef { exp rect X(4) } })"                  },
+            {"rect x expression",                     R"(menuDef { name "m" layoutVersion 1 itemDef { exp rect X(4) } })"                  },
+            {"rect y expression",                     R"(menuDef { name "m" layoutVersion 1 itemDef { exp rect Y(4) } })"                  },
             {"repeated property",                     R"(menuDef { name "m" layoutVersion 1 itemDef { offsetX 1 offsetX 2 } })"            },
             {"width and widthPercent",                R"(menuDef { name "m" layoutVersion 1 itemDef { width 10 widthPercent 0.5 } })"      },
             {"rect and offsetX",                      R"(menuDef { name "m" layoutVersion 1 itemDef { offsetX 1 rect 0 0 10 10 } })"       },
