@@ -555,6 +555,40 @@ height 2
 )"s);
     }
 
+    TEST_CASE("MenuParsingIW4MSIT: Keeps static width and height expressions of layout items", "[parsing][converting][menu][layout][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile(R"testmenu(
+{
+	menuDef
+	{
+		name "mirrored"
+		layoutVersion 1
+		itemDef
+		{
+			name "symbol"
+			width 64
+			height 32
+			exp rect W(-64)
+			exp rect H(32)
+		}
+	}
+}
+)testmenu");
+
+        const auto result = helper.RunIntegrationTest();
+        REQUIRE(result.HasBeenSuccessful());
+
+        const auto* menu = helper.GetMenu("mirrored");
+        REQUIRE(menu->itemCount == 1);
+
+        const auto* item = menu->items[0];
+        REQUIRE(item->floatExpressionCount == 2);
+        REQUIRE(item->floatExpressions[0].target == ITEM_FLOATEXP_TGT_RECT_W);
+        REQUIRE(item->floatExpressions[1].target == ITEM_FLOATEXP_TGT_RECT_H);
+    }
+
     TEST_CASE("MenuParsingIW4MSIT: Writes the map a layout item stands for", "[parsing][converting][menu][layout][it]")
     {
         MenuParsingItHelper helper;

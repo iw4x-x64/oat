@@ -909,10 +909,16 @@ namespace
                  },
             };
 
+            // A layout menu's client places and sizes the item itself, overwriting the static rect, and only then applies the
+            // width and height expressions. So these stay expressions even when static, or a constant size (a negative one, which
+            // mirrors what the item draws) would be lost.
+            const auto laidOut = parentMenu != nullptr && parentMenu->m_layout_version.has_value();
+
             floatExpressionCount = 0;
             for (auto& [expression, expressionIsStatic, target, staticValue, staticValueArraySize, dynamicFlagsToSet] : locations)
             {
-                expressionIsStatic = !m_disable_optimizations && staticValue != nullptr && expression && expression->IsStatic();
+                const auto keptByLayout = laidOut && (target == ITEM_FLOATEXP_TGT_RECT_W || target == ITEM_FLOATEXP_TGT_RECT_H);
+                expressionIsStatic = !m_disable_optimizations && !keptByLayout && staticValue != nullptr && expression && expression->IsStatic();
 
                 if (expressionIsStatic)
                 {
