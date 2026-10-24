@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <optional>
 #include <regex>
-#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -47,7 +46,7 @@ public:
 
     std::vector<std::string> m_zones_to_load;
     std::vector<std::string> m_zones_to_unlink;
-    std::set<std::string> m_user_search_paths;
+    std::vector<std::string> m_user_search_paths;
 
     ProcessingTask m_task;
     std::string m_output_folder;
