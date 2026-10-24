@@ -161,7 +161,8 @@ namespace
             }
 
             const auto* zoneDefWriter = IZoneDefWriter::GetZoneDefWriterForGame(zone.m_game_id);
-            zoneDefWriter->WriteZoneDef(zoneDefinitionFile, zone, m_args.m_use_gdt, m_args.m_minimal_zone_def);
+            auto assetTypes = m_args.m_specified_asset_types.empty() ? std::vector<bool>() : ObjWriting::Configuration.AssetTypesToHandleBitfield;
+            zoneDefWriter->WriteZoneDef(zoneDefinitionFile, zone, m_args.m_use_gdt, m_args.m_minimal_zone_def, std::move(assetTypes));
 
             zoneDefinitionFile.close();
 
@@ -188,9 +189,9 @@ namespace
             return true;
         }
 
-        void UpdateAssetIncludesAndExcludes(const AssetDumpingContext& context) const
+        void UpdateAssetIncludesAndExcludes(const Zone& zone) const
         {
-            const auto gameId = context.m_zone.m_game_id;
+            const auto gameId = zone.m_game_id;
             const auto* game = IGame::GetGameById(gameId);
             const auto assetTypeCount = game->GetAssetTypeCount();
 
@@ -255,6 +256,8 @@ namespace
                 zoneDefinitionFileFolder.append("zone_source");
                 fs::create_directories(zoneDefinitionFileFolder);
 
+                UpdateAssetIncludesAndExcludes(zone);
+
                 if (!WriteZoneDefinitionFile(zone, zoneDefinitionFileFolder))
                     return false;
 
@@ -274,8 +277,6 @@ namespace
 
                     context.m_gdt = std::move(gdt);
                 }
-
-                UpdateAssetIncludesAndExcludes(context);
 
                 auto* objWriter = IObjWriter::GetObjWriterForGame(zone.m_game_id);
 
