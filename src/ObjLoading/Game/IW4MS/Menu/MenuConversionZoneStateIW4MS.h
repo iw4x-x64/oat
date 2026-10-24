@@ -21,6 +21,7 @@ namespace IW4MS
 
     public:
         std::map<std::string, std::vector<XAssetInfo<menuDef_t>*>> m_menus_by_filename;
+        std::map<std::string, std::vector<std::string>> m_menus_to_load_by_filename;
         ExpressionSupportingData* m_supporting_data;
 
         MenuConversionZoneState();

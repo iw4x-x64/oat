@@ -35,6 +35,11 @@ namespace test::game::iw4ms::menu::parsing::it
             m_asset_creator = ::menu::CreateMenuListLoaderIW4MS(m_zone.Memory(), m_search_path);
         }
 
+        void AddFile(std::string fileName, std::string data)
+        {
+            m_search_path.AddFileData(std::move(fileName), std::move(data));
+        }
+
         void AddFile(std::string data)
         {
             m_search_path.AddFileData(DEFAULT_ASSET_NAME, std::move(data));
@@ -43,6 +48,19 @@ namespace test::game::iw4ms::menu::parsing::it
         AssetCreationResult RunIntegrationTest()
         {
             return m_asset_creator->CreateAsset(DEFAULT_ASSET_NAME, m_context);
+        }
+
+        AssetCreationResult CreateMenuList(const std::string& name)
+        {
+            return m_asset_creator->CreateAsset(name, m_context);
+        }
+
+        [[nodiscard]] const menuDef_t* GetMenu(const std::string& name) const
+        {
+            const auto addedAsset = m_zone.m_pools.GetAsset(ASSET_TYPE_MENU, name);
+            REQUIRE(addedAsset);
+
+            return static_cast<const menuDef_t*>(addedAsset->m_ptr);
         }
 
         [[nodiscard]] bool HasRawFile(const std::string& name) const
@@ -345,5 +363,45 @@ motion springy
         const auto result = helper.RunIntegrationTest();
         REQUIRE(result.HasFailed());
         REQUIRE(!helper.HasRawFile("layout/m"));
+    }
+
+    TEST_CASE("MenuParsingIW4MSIT: Keeps the menus of a menu list loaded by an earlier one", "[parsing][converting][menu][it]")
+    {
+        MenuParsingItHelper helper;
+
+        helper.AddFile("ui_mp/ingame.txt", R"testmenu(
+{
+    loadMenu { "ui_mp/scriptmenus/killstreak.menu" }
+}
+)testmenu");
+
+        helper.AddFile("ui_mp/scriptmenus/killstreak.menu", R"testmenu(
+{
+    loadMenu { "ui_mp/killstreak_hint.menu" }
+    menuDef
+    {
+        name "killstreak"
+    }
+}
+)testmenu");
+
+        helper.AddFile("ui_mp/killstreak_hint.menu", R"testmenu(
+{
+    menuDef
+    {
+        name "killstreak_hint"
+    }
+}
+)testmenu");
+
+        REQUIRE(helper.CreateMenuList("ui_mp/ingame.txt").HasBeenSuccessful());
+
+        const auto result = helper.CreateMenuList("ui_mp/scriptmenus/killstreak.menu");
+        REQUIRE(result.HasBeenSuccessful());
+
+        const auto* menuList = static_cast<const MenuList*>(result.GetAssetInfo()->m_ptr);
+        REQUIRE(menuList->menuCount == 2);
+        REQUIRE(menuList->menus[0] == helper.GetMenu("killstreak"));
+        REQUIRE(menuList->menus[1] == helper.GetMenu("killstreak_hint"));
     }
 } // namespace test::game::iw4ms::menu::parsing::it
