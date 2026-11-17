@@ -154,7 +154,7 @@ SimpleParserValue SimpleLexer::GetNextToken()
 
     if (isalpha(c) || c == '_')
     {
-        auto identifier = ReadIdentifier();
+        auto identifier = ReadIdentifier(m_config.m_allow_dots_in_identifiers);
 
         return SimpleParserValue::Identifier(pos, new std::string(std::move(identifier)));
     }

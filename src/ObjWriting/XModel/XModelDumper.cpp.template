@@ -6,6 +6,7 @@
 #set COMMON_HEADER "\"Game/" + GAME + "/Common" + GAME + ".h\""
 #set JSON_HEADER "\"Game/" + GAME + "/XModel/JsonXModel" + GAME + ".h\""
 #set CONVERTER_HEADER "\"Game/" + GAME + "/XModel/XModelToCommonConverter" + GAME + ".h\""
+#set CONSTANTS_HEADER "\"Game/" + GAME + "/XModel/XModelConstants" + GAME + ".h\""
 
 #if GAME == "IW3"
 #define FEATURE_IW3
@@ -44,6 +45,9 @@
 #include COMMON_HEADER
 #include JSON_HEADER
 #include CONVERTER_HEADER
+#if !defined(FEATURE_QOS)
+#include CONSTANTS_HEADER
+#endif
 
 #include "ObjWriting.h"
 #include "Utils/DistinctMapper.h"
@@ -58,6 +62,9 @@
 
 #include <cassert>
 #include <format>
+#include <map>
+#include <string>
+#include <type_traits>
 
 using namespace GAME;
 
@@ -374,6 +381,33 @@ namespace
                && ObjWriting::Configuration.ModelOutputFormat != ModelOutputFormat_e::XMODEL_BIN;
     }
     
+#if !defined(FEATURE_QOS)
+    // Record the exact per-bone hit locations so that relinking reproduces them
+    // regardless of what partclassification.csv says. Models without any
+    // classified bone (heads, viewhands, weapons) get an empty object.
+    void SetJsonPartClassification(const AssetDumpingContext& context, JsonXModel& jXModel, const XModel& model)
+    {
+        if (!model.boneNames || model.numBones == 0)
+            return;
+
+        std::map<std::string, std::string> partClassification;
+        if (model.partClassification)
+        {
+            constexpr auto hitLocCount = std::extent_v<decltype(HITLOC_NAMES)>;
+            for (auto boneIndex = 0u; boneIndex < model.numBones; boneIndex++)
+            {
+                const auto hitLoc = model.partClassification[boneIndex];
+                if (hitLoc == 0 || hitLoc >= hitLocCount || model.boneNames[boneIndex] >= context.m_zone.m_script_strings.Count())
+                    continue;
+
+                partClassification.emplace(context.m_zone.m_script_strings[model.boneNames[boneIndex]], HITLOC_NAMES[hitLoc]);
+            }
+        }
+
+        jXModel.partClassification = std::move(partClassification);
+    }
+#endif
+
     void CreateJsonXModel(AssetDumpingContext& context, JsonXModel& jXModel, const XModel& model)
     {
         if (model.collLod >= 0)
@@ -412,6 +446,10 @@ namespace
 #endif
 
         jXModel.flags = model.flags;
+
+#if !defined(FEATURE_QOS)
+        SetJsonPartClassification(context, jXModel, model);
+#endif
 
 #ifdef FEATURE_T6
         jXModel.lightingOriginOffset.x = model.lightingOriginOffset.x;

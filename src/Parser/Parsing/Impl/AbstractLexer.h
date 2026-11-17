@@ -178,9 +178,10 @@ protected:
 
     /**
      * \brief Reads an identifier from the current position
+     * \param allowDots Whether '.' may appear after the first character of the identifier
      * \return The value of the read identifier
      */
-    std::string ReadIdentifier()
+    std::string ReadIdentifier(const bool allowDots = false)
     {
         const auto& currentLine = CurrentLine();
         assert(m_current_line_offset >= 1);
@@ -192,7 +193,7 @@ protected:
         {
             const auto c = currentLine.m_line[m_current_line_offset];
 
-            if (!isalnum(c) && c != '_')
+            if (!isalnum(c) && c != '_' && !(allowDots && c == '.'))
                 break;
 
             m_current_line_offset++;

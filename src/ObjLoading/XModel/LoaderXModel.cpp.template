@@ -68,6 +68,7 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <unordered_map>
 #include <vector>
 
 using namespace GAME;
@@ -351,7 +352,27 @@ namespace
             if (common.m_bones.empty())
                 return true;
 
-            m_part_classification_state.Load(HITLOC_NAMES, std::extent_v<decltype(HITLOC_NAMES)>, m_search_path);
+            // An explicit per-model table takes precedence over partclassification.csv
+            // and is applied exactly: bones it does not list get no hit location.
+            std::unordered_map<std::string, unsigned char> explicitPartClassification;
+            if (jXModel.partClassification)
+            {
+                constexpr auto hitLocCount = std::extent_v<decltype(HITLOC_NAMES)>;
+                for (const auto& [boneName, hitLocName] : *jXModel.partClassification)
+                {
+                    const auto foundHitLoc = std::find(std::begin(HITLOC_NAMES), std::end(HITLOC_NAMES), hitLocName);
+                    if (foundHitLoc == std::end(HITLOC_NAMES))
+                    {
+                        PrintError(xmodel, std::format("Invalid hit location \"{}\" for bone \"{}\" in partClassification", hitLocName, boneName));
+                        return false;
+                    }
+
+                    static_assert(hitLocCount <= std::numeric_limits<unsigned char>::max());
+                    explicitPartClassification.emplace(boneName, static_cast<unsigned char>(std::distance(std::begin(HITLOC_NAMES), foundHitLoc)));
+                }
+            }
+            else
+                m_part_classification_state.Load(HITLOC_NAMES, std::extent_v<decltype(HITLOC_NAMES)>, m_search_path);
 
             const auto boneCount = common.m_bones.size();
             constexpr auto maxBones = std::numeric_limits<decltype(XModel::numBones)>::max();
@@ -404,7 +425,13 @@ namespace
                 const auto& bone = common.m_bones[boneIndex];
                 xmodel.boneNames[boneIndex] = m_script_strings.AddOrGetScriptString(bone.name);
                 registration.AddScriptString(xmodel.boneNames[boneIndex]);
-                xmodel.partClassification[boneIndex] = static_cast<unsigned char>(m_part_classification_state.GetPartClassificationForBoneName(bone.name));
+                if (jXModel.partClassification)
+                {
+                    const auto explicitEntry = explicitPartClassification.find(bone.name);
+                    xmodel.partClassification[boneIndex] = explicitEntry != explicitPartClassification.end() ? explicitEntry->second : static_cast<unsigned char>(HITLOC_NONE);
+                }
+                else
+                    xmodel.partClassification[boneIndex] = static_cast<unsigned char>(m_part_classification_state.GetPartClassificationForBoneName(bone.name));
 
                 ApplyBasePose(xmodel.baseMat[boneIndex], bone);
                 CalculateBoneBounds(xmodel.boneInfo[boneIndex], boneIndex, common);

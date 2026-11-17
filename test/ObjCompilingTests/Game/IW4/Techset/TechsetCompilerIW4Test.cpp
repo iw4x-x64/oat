@@ -109,6 +109,28 @@ TEST_CASE("TechsetCompilerIW4", "[techset][iw4][compiler]")
         CHECK(techset->techniques[TECHNIQUE_LIT_OMNI] == exampleLit);
     }
 
+    SECTION("Can parse techset with dotted technique names")
+    {
+        searchPath.AddFileData(techset::GetFileNameForTechsetName("dotted.5x"), R"TECHSET(
+"depth prepass":
+  zprepass.5x;
+
+"lit omni":
+  example_lit_omni.5x;
+)TECHSET");
+
+        auto* zPrepass = GivenTechnique("zprepass.5x", context, memory);
+        auto* exampleLit = GivenTechnique("example_lit_omni.5x", context, memory);
+
+        const auto result = sut->CreateAsset("dotted.5x", context);
+        REQUIRE(result.HasBeenSuccessful());
+
+        const auto* techset = static_cast<MaterialTechniqueSet*>(result.GetAssetInfo()->m_ptr);
+        CHECK(techset->name == "dotted.5x"s);
+        CHECK(techset->techniques[TECHNIQUE_DEPTH_PREPASS] == zPrepass);
+        CHECK(techset->techniques[TECHNIQUE_LIT_OMNI] == exampleLit);
+    }
+
     SECTION("Can parse techset with same technique used multiple times")
     {
         searchPath.AddFileData(techset::GetFileNameForTechsetName("simple"), R"TECHSET(

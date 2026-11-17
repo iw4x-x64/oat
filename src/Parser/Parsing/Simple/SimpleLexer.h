@@ -27,6 +27,8 @@ public:
         bool m_string_escape_sequences = false;
         bool m_read_integer_numbers = true;
         bool m_read_floating_point_numbers = true;
+        // Allow '.' inside identifiers (e.g. "zprepass.5x").
+        bool m_allow_dots_in_identifiers = false;
         std::vector<MultiCharacterToken> m_multi_character_tokens;
     };
 

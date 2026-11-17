@@ -31,6 +31,10 @@ namespace techset
         lexerConfig.m_read_integer_numbers = false;
         lexerConfig.m_read_floating_point_numbers = false;
 
+        // Technique names may contain dots (e.g. "zprepass.5x"), and the techset
+        // grammar gives '.' no other meaning, so lex such names as one identifier.
+        lexerConfig.m_allow_dots_in_identifiers = true;
+
         ParserSingleInputStream baseStream(*techniqueFile.m_stream, fileName);
         CommentRemovingStreamProxy commentProxy(&baseStream);
         const auto lexer = std::make_unique<SimpleLexer>(&commentProxy, std::move(lexerConfig));
