@@ -6,16 +6,6 @@
 
 namespace
 {
-    void MarkLayoutStructureAndUsages(std::unordered_set<const void*>& visitedStructures, StructureInformation* info)
-    {
-        if (!visitedStructures.emplace(info).second)
-            return;
-
-        info->m_has_matching_cross_platform_structure = false;
-        for (auto* usage : info->m_usages)
-            MarkLayoutStructureAndUsages(visitedStructures, usage);
-    }
-
     bool CalculateHasMatchingCrossPlatformStructure(std::unordered_set<const void*>& visitedStructures, StructureInformation* info)
     {
         if (visitedStructures.find(info) != visitedStructures.end())
@@ -56,20 +46,14 @@ bool CrossPlatformStructurePostProcessor::PostProcess(IDataRepository* repositor
 {
     const auto& allInfos = repository->GetAllStructureInformation();
 
-    std::unordered_set<const void*> visitedStructures;
     if (repository->GetWordSize() == OWN_WORD_SIZE)
     {
         for (const auto& info : allInfos)
             info->m_has_matching_cross_platform_structure = true;
-
-        for (const auto& info : allInfos)
-        {
-            if (info->m_layout_action)
-                MarkLayoutStructureAndUsages(visitedStructures, info);
-        }
     }
     else
     {
+        std::unordered_set<const void*> visitedStructures;
         for (const auto& info : allInfos)
         {
             CalculateHasMatchingCrossPlatformStructure(visitedStructures, info);

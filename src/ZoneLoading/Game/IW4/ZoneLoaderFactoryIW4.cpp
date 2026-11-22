@@ -334,6 +334,14 @@ std::unique_ptr<ZoneLoader> ZoneLoaderFactory::CreateLoaderForHeader(ZoneDataPee
     if (!inspectResult)
         return nullptr;
 
+#ifndef ARCH_x64
+    if (ZoneConstants::IsAlphaVersion(inspectResult->m_zone_version))
+    {
+        con::error("Loading pre-release IW4 zones needs a 64 bit build.");
+        return nullptr;
+    }
+#endif
+
     // Create new zone
     auto zone = std::make_unique<Zone>(fileName, 0, GameId::IW4, inspectResult->m_generic_result.m_platform);
     auto* zonePtr = zone.get();
