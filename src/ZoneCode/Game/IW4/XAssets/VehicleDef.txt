@@ -3,9 +3,11 @@
 // =========================================
 use VehicleDef;
 set block XFILE_BLOCK_TEMP;
+set layout LoadVehicleDefLayout;
 set string name;
 set string useHintString;
 set string turretWeaponName;
+set action turretWeaponName LoadAlphaTurretWeapon(VehicleDef);
 set scriptstring trophyTags;
 set string surfaceSndPrefix;
 

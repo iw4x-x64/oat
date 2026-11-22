@@ -3,6 +3,7 @@
 // =========================================
 use GfxImage;
 set block XFILE_BLOCK_TEMP;
+set layout LoadGfxImageLayout;
 set action OnImageLoaded(GfxImage);
 set string name;
 reorder:
@@ -13,6 +14,7 @@ reorder:
 use GfxTexture;
 set reusable loadDef;
 set block loadDef XFILE_BLOCK_TEMP;
+set layout loadDef LoadGfxImageLoadDefBlock;
 
 // GfxImageLoadDef
 use GfxImageLoadDef;

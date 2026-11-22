@@ -3,6 +3,8 @@
 // =========================================
 use GfxWorld;
 set block XFILE_BLOCK_TEMP;
+set layout LoadGfxWorldLayout;
+set action sunflare_t LoadSunflareMaterials(sunflare_t);
 set string name;
 set string baseName;
 set count skies skyCount;

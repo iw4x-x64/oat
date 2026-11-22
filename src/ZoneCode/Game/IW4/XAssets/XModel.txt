@@ -3,6 +3,7 @@
 // =========================================
 use XModel;
 set block XFILE_BLOCK_TEMP;
+set layout LoadXModelLayout;
 set string name;
 set scriptstring boneNames;
 set reusable boneNames;
@@ -25,17 +26,20 @@ set count boneInfo numBones;
 use XModelLodInfo;
 set block modelSurfs XFILE_BLOCK_TEMP;
 set action modelSurfs SetModelSurfs(XModelLodInfo, XModelSurfs);
+set action LoadXModelLodInfoName(XModelLodInfo);
 set reusable modelSurfs;
 set condition surfs never;
 
 // XModelSurfs
 use XModelSurfs;
 set block XFILE_BLOCK_VIRTUAL;
+set layout LoadXModelSurfsLayout;
 set string name;
 set count surfs XModelLodInfo::numsurfs; // No this is not a mistake. This is how the game does it.
 
 // XSurface
 use XSurface;
+set layout LoadXSurfaceLayout;
 set reusable verts0;
 set block verts0 XFILE_BLOCK_VERTEX;
 set count verts0 vertCount;

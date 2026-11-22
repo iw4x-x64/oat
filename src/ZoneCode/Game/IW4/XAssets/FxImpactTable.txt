@@ -5,3 +5,8 @@ use FxImpactTable;
 set block XFILE_BLOCK_TEMP;
 set string name;
 set count table 15;
+set action table LoadAlphaImpactEntry(FxImpactTable);
+
+// FxImpactEntry
+use FxImpactEntry;
+set layout LoadFxImpactEntryLayout;

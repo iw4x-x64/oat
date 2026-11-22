@@ -3,6 +3,7 @@
 // =========================================
 use MaterialTechniqueSet;
 set block XFILE_BLOCK_TEMP;
+set layout LoadMaterialTechniqueSetLayout;
 set string name;
 set condition remappedTechniqueSet never;
 set reusable techniques;
@@ -18,6 +19,7 @@ reorder:
 // MaterialPass
 use MaterialPass;
 set count args perPrimArgCount + perObjArgCount + stableArgCount;
+set action args RemapAlphaCodeConsts(MaterialPass);
 
 // MaterialShaderArgument
 use MaterialShaderArgument;

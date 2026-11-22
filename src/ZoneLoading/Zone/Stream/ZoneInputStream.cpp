@@ -11,12 +11,14 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <ranges>
 #include <sstream>
 #include <stack>
 #include <unordered_map>
 
 ZoneStreamFillReadAccessor::ZoneStreamFillReadAccessor(void* blockBuffer, const size_t bufferSize, const unsigned pointerByteCount, const size_t offset)
-    : m_block_buffer(blockBuffer),
+    : m_data(blockBuffer),
+      m_block_buffer(blockBuffer),
       m_buffer_size(bufferSize),
       m_pointer_byte_count(pointerByteCount),
       m_offset(offset)
@@ -25,10 +27,34 @@ ZoneStreamFillReadAccessor::ZoneStreamFillReadAccessor(void* blockBuffer, const 
     assert(m_pointer_byte_count <= sizeof(uintptr_t));
 }
 
+ZoneStreamFillReadAccessor::ZoneStreamFillReadAccessor(const void* data,
+                                                       void* blockBuffer,
+                                                       const size_t bufferSize,
+                                                       const unsigned pointerByteCount,
+                                                       std::shared_ptr<const std::vector<ZoneStreamFillRelocation>> relocations)
+    : m_data(data),
+      m_block_buffer(blockBuffer),
+      m_buffer_size(bufferSize),
+      m_pointer_byte_count(pointerByteCount),
+      m_offset(0),
+      m_relocations(std::move(relocations))
+{
+    assert(m_pointer_byte_count <= sizeof(uintptr_t));
+}
+
 ZoneStreamFillReadAccessor ZoneStreamFillReadAccessor::AtOffset(const size_t offset) const
 {
     assert(offset <= m_buffer_size);
-    return ZoneStreamFillReadAccessor(static_cast<char*>(m_block_buffer) + offset, m_buffer_size - offset, m_pointer_byte_count, m_offset + offset);
+
+    auto result(*this);
+    result.m_data = static_cast<const char*>(m_data) + offset;
+    result.m_buffer_size = m_buffer_size - offset;
+    result.m_offset = m_offset + offset;
+
+    if (!m_relocations)
+        result.m_block_buffer = static_cast<char*>(m_block_buffer) + offset;
+
+    return result;
 }
 
 size_t ZoneStreamFillReadAccessor::Offset() const
@@ -38,7 +64,17 @@ size_t ZoneStreamFillReadAccessor::Offset() const
 
 void* ZoneStreamFillReadAccessor::BlockBuffer(const size_t offset) const
 {
-    return static_cast<uint8_t*>(m_block_buffer) + offset;
+    if (!m_relocations)
+        return static_cast<uint8_t*>(m_block_buffer) + offset;
+
+    const auto fillOffset = m_offset + offset;
+    for (const auto& relocation : std::ranges::reverse_view(*m_relocations))
+    {
+        if (fillOffset >= relocation.m_fill_offset && fillOffset < relocation.m_fill_offset + relocation.m_size)
+            return static_cast<uint8_t*>(m_block_buffer) + relocation.m_block_offset + (fillOffset - relocation.m_fill_offset);
+    }
+
+    return static_cast<uint8_t*>(m_block_buffer) + fillOffset;
 }
 
 namespace

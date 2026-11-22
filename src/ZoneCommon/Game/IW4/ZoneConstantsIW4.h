@@ -23,7 +23,13 @@ namespace IW4
 
         static constexpr int ZONE_VERSION_ALPHA2 = 316;
         static constexpr int ZONE_VERSION_ALPHA3 = 319;
+        static constexpr int ZONE_VERSION_ALPHA_IMAGE = 332;
+        static constexpr int ZONE_VERSION_ALPHA_LARGE_XASSET = 334;
+        static constexpr int ZONE_VERSION_ALPHA_IMAGE_LARGE = 359;
         static constexpr int ZONE_VERSION_ALPHA_PKCS1 = 359;
+        static constexpr int ZONE_VERSION_ALPHA_MATERIAL_INFO = 359;
+        static constexpr int ZONE_VERSION_ALPHA_TECHSET_REMAP = 359;
+        static constexpr int ZONE_VERSION_ALPHA_WORLD = 359;
         static constexpr int ZONE_VERSION_ALPHA_LAST = 360;
 
         static constexpr size_t ALPHA_ENCRYPTED_KEY_SIZE = 256;

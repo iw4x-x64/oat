@@ -1,7 +1,9 @@
 #include "ContentLoaderIW4.h"
 
+#include "Game/IW4/AlphaWeaponIW4.h"
 #include "Game/IW4/AssetLoaderIW4.h"
 #include "Game/IW4/IW4.h"
+#include "Game/IW4/ZoneConstantsIW4.h"
 #include "Loading/Exception/UnsupportedAssetTypeException.h"
 #include "Zone/Stream/ZoneStreamTrace.h"
 
@@ -90,7 +92,20 @@ void ContentLoader::LoadXAsset(const bool atStreamStart) const
         LOAD_ASSET(ASSET_TYPE_MENULIST, MenuList, menuList)
         LOAD_ASSET(ASSET_TYPE_MENU, menuDef_t, menu)
         LOAD_ASSET(ASSET_TYPE_LOCALIZE_ENTRY, LocalizeEntry, localize)
-        LOAD_ASSET(ASSET_TYPE_WEAPON, WeaponCompleteDef, weapon)
+    case ASSET_TYPE_WEAPON:
+    {
+        if (ZoneConstants::IsAlphaVersion(m_zone.m_version))
+        {
+            AlphaWeaponLoader loader(m_zone, m_stream);
+            loader.Load(&varXAsset->header.weapon);
+        }
+        else
+        {
+            Loader_WeaponCompleteDef loader(m_zone, m_stream);
+            loader.Load(&varXAsset->header.weapon);
+        }
+        break;
+    }
         SKIP_ASSET(ASSET_TYPE_SNDDRIVER_GLOBALS, SndDriverGlobals, sndDriverGlobals)
         LOAD_ASSET(ASSET_TYPE_FX, FxEffectDef, fx)
         LOAD_ASSET(ASSET_TYPE_IMPACT_FX, FxImpactTable, impactFx)
@@ -115,7 +130,18 @@ void ContentLoader::LoadXAssetArray(const bool atStreamStart, const size_t count
 {
     assert(varXAsset != nullptr);
 
-    if (atStreamStart)
+    if (atStreamStart && m_zone.m_version >= ZoneConstants::ZONE_VERSION_ALPHA_LARGE_XASSET)
+    {
+        const auto fill = m_stream.LoadWithFill(16u * count);
+
+        for (size_t index = 0; index < count; index++)
+        {
+            fill.Fill(varXAsset[index].type, 16u * index);
+            fill.FillPtr(varXAsset[index].header.data, 16u * index + 8u);
+            m_stream.AddPointerLookup(&varXAsset[index].header.data, fill.BlockBuffer(16u * index + 8u));
+        }
+    }
+    else if (atStreamStart)
     {
 #ifdef ARCH_x86
         m_stream.Load<XAsset>(varXAsset, count);

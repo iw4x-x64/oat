@@ -16,10 +16,22 @@
 #include <vector>
 
 
+struct ZoneStreamFillRelocation
+{
+    size_t m_fill_offset;
+    size_t m_block_offset;
+    size_t m_size;
+};
+
 class ZoneStreamFillReadAccessor
 {
 public:
     ZoneStreamFillReadAccessor(void* blockBuffer, size_t bufferSize, unsigned pointerByteCount, size_t offset);
+    ZoneStreamFillReadAccessor(const void* data,
+                               void* blockBuffer,
+                               size_t bufferSize,
+                               unsigned pointerByteCount,
+                               std::shared_ptr<const std::vector<ZoneStreamFillRelocation>> relocations);
 
     [[nodiscard]] ZoneStreamFillReadAccessor AtOffset(size_t offset) const;
     [[nodiscard]] size_t Offset() const;
@@ -29,14 +41,14 @@ public:
     {
         assert(offset + sizeof(T) <= m_buffer_size);
 
-        value = *reinterpret_cast<const T*>(static_cast<const char*>(m_block_buffer) + offset);
+        value = *reinterpret_cast<const T*>(static_cast<const char*>(m_data) + offset);
     }
 
     template<typename T, size_t S> void FillArray(T (&value)[S], const size_t offset) const
     {
         assert(offset + sizeof(T) * S <= m_buffer_size);
 
-        std::memcpy(value, static_cast<const char*>(m_block_buffer) + offset, sizeof(T) * S);
+        std::memcpy(value, static_cast<const char*>(m_data) + offset, sizeof(T) * S);
     }
 
     template<typename T> void FillPtr(T*& value, const size_t offset) const
@@ -45,14 +57,16 @@ public:
         assert(m_pointer_byte_count <= sizeof(uintptr_t));
 
         value = nullptr;
-        std::memcpy(&value, static_cast<const char*>(m_block_buffer) + offset, m_pointer_byte_count);
+        std::memcpy(&value, static_cast<const char*>(m_data) + offset, m_pointer_byte_count);
     }
 
 private:
+    const void* m_data;
     void* m_block_buffer;
     size_t m_buffer_size;
     unsigned m_pointer_byte_count;
     size_t m_offset;
+    std::shared_ptr<const std::vector<ZoneStreamFillRelocation>> m_relocations;
 };
 
 template<typename T> class MaybePointerFromLookup

@@ -29,6 +29,7 @@ public:
     GameLanguage m_language;
     GameId m_game_id;
     GamePlatform m_platform;
+    int m_version = 0;
     ZoneScriptStrings m_script_strings;
     ZoneAssetPools m_pools;
 

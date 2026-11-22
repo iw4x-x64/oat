@@ -3,5 +3,6 @@
 // =========================================
 use PhysPreset;
 set block XFILE_BLOCK_TEMP;
+set layout LoadPhysPresetLayout;
 set string name;
 set string sndAliasPrefix;

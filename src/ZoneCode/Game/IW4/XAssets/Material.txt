@@ -3,8 +3,10 @@
 // =========================================
 use Material;
 set block XFILE_BLOCK_TEMP;
+set layout LoadMaterialLayout;
 set allocalign Material 4;
 set string info::name;
+set action info::name FixDistortionSortKey(Material);
 set reusable textureTable;
 set count textureTable textureCount;
 set reusable constantTable;

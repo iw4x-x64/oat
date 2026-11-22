@@ -9,6 +9,7 @@ set count head count;
 
 // snd_alias_t
 use snd_alias_t;
+set layout Loadsnd_alias_tLayout;
 set string aliasName;
 set string subtitle;
 set string secondaryAliasName;

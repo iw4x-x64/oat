@@ -3,6 +3,7 @@
 // =========================================
 use LoadedSound;
 set block XFILE_BLOCK_TEMP;
+set layout LoadLoadedSoundLayout;
 set string name;
 
 // MssSound

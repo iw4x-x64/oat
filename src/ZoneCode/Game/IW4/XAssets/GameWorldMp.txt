@@ -3,4 +3,6 @@
 // =========================================
 use GameWorldMp;
 set block XFILE_BLOCK_TEMP;
+set layout LoadGameWorldMpLayout;
 set string name;
+set action name LoadAlphaPathData(GameWorldMp);

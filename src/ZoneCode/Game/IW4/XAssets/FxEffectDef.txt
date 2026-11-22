@@ -8,6 +8,8 @@ set count elemDefs elemDefCountEmission + elemDefCountLooping + elemDefCountOneS
 
 // FxElemDef
 use FxElemDef;
+set layout LoadFxElemDefLayout;
+set action LoadFxElemDefName(FxElemDef);
 set count velSamples velIntervalCount + 1;
 set count visSamples visStateIntervalCount + 1;
 
