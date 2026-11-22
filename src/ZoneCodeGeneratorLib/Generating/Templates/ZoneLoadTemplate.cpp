@@ -83,15 +83,15 @@ namespace
             m_intendation++;
 
             // Method Declarations
+            for (const auto* type : m_env.m_used_types)
+            {
+                if (ShouldGenerateFillMethod(*type, m_env.m_word_size_mismatch))
+                {
+                    PrintFillStructMethodDeclaration(type->m_info);
+                }
+            }
             if (m_env.m_word_size_mismatch)
             {
-                for (const auto* type : m_env.m_used_types)
-                {
-                    if (ShouldGenerateFillMethod(*type))
-                    {
-                        PrintFillStructMethodDeclaration(type->m_info);
-                    }
-                }
                 for (const auto* type : m_env.m_used_types)
                 {
                     if (type->m_info && type->m_type == type->m_info->m_definition && StructureComputations(type->m_info).GetDynamicMember())
@@ -190,16 +190,16 @@ namespace
             LINE("")
             PrintMainLoadMethod();
 
+            for (const auto* type : m_env.m_used_types)
+            {
+                if (ShouldGenerateFillMethod(*type, m_env.m_word_size_mismatch))
+                {
+                    LINE("")
+                    PrintFillStructMethod(type->m_info);
+                }
+            }
             if (m_env.m_word_size_mismatch)
             {
-                for (const auto* type : m_env.m_used_types)
-                {
-                    if (ShouldGenerateFillMethod(*type))
-                    {
-                        LINE("")
-                        PrintFillStructMethod(type->m_info);
-                    }
-                }
                 for (const auto* type : m_env.m_used_types)
                 {
                     if (type->m_info && type->m_type == type->m_info->m_definition && StructureComputations(type->m_info).GetDynamicMember())

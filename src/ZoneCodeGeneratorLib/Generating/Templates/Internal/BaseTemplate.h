@@ -36,7 +36,7 @@ protected:
     static std::string MakeAllocAlignment(const StructureInformation& info);
     static std::string MakeEvaluation(const IEvaluation* evaluation);
 
-    static bool ShouldGenerateFillMethod(const RenderingUsedType& type);
+    static bool ShouldGenerateFillMethod(const RenderingUsedType& type, bool wordSizeMismatch);
 
     static void MakeSafeTypeNameInternal(const DataDefinition* def, std::ostringstream& str);
     static void MakeArrayIndicesInternal(const DeclarationModifierComputations& modifierComputations, std::ostringstream& str);

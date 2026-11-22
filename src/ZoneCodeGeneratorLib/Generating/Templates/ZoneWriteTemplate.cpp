@@ -79,14 +79,11 @@ namespace
             m_intendation++;
 
             // Method Declarations
-            if (m_env.m_word_size_mismatch)
+            for (const auto* type : m_env.m_used_types)
             {
-                for (const auto* type : m_env.m_used_types)
+                if (ShouldGenerateFillMethod(*type, m_env.m_word_size_mismatch))
                 {
-                    if (ShouldGenerateFillMethod(*type))
-                    {
-                        PrintFillStructMethodDeclaration(type->m_info);
-                    }
+                    PrintFillStructMethodDeclaration(type->m_info);
                 }
             }
             for (const auto* type : m_env.m_used_types)
@@ -178,15 +175,12 @@ namespace
             LINE("")
             PrintMainWriteMethod();
 
-            if (m_env.m_word_size_mismatch)
+            for (const auto* type : m_env.m_used_types)
             {
-                for (const auto* type : m_env.m_used_types)
+                if (ShouldGenerateFillMethod(*type, m_env.m_word_size_mismatch))
                 {
-                    if (ShouldGenerateFillMethod(*type))
-                    {
-                        LINE("")
-                        PrintFillStructMethod(type->m_info);
-                    }
+                    LINE("")
+                    PrintFillStructMethod(type->m_info);
                 }
             }
             for (const auto* type : m_env.m_used_types)
