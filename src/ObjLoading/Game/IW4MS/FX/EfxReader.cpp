@@ -26,7 +26,7 @@ namespace fx
         contents << stream.rdbuf();
         const auto text = contents.str();
 
-        for (auto i = 0u; i < text.size();)
+        for (auto i = 0uz; i < text.size();)
         {
             const auto c = text[i];
 
