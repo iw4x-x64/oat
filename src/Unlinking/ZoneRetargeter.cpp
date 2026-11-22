@@ -225,6 +225,105 @@ namespace
         return target;
     }
 
+    constexpr int WAVE_FORMAT_PCM = 1;
+    constexpr int WAVE_FORMAT_IMA_ADPCM = 17;
+
+    constexpr int IMA_INDEX_TABLE[16]{-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8};
+
+    constexpr int IMA_STEP_TABLE[89]{
+        7,     8,     9,     10,    11,    12,    13,    14,    16,    17,    19,    21,    23,    25,    28,    31,    34,    37,
+        41,    45,    50,    55,    60,    66,    73,    80,    88,    97,    107,   118,   130,   143,   157,   173,   190,   209,
+        230,   253,   279,   307,   337,   371,   408,   449,   494,   544,   598,   658,   724,   796,   876,   963,   1060,  1166,
+        1282,  1411,  1552,  1707,  1878,  2066,  2272,  2499,  2749,  3024,  3327,  3660,  4026,  4428,  4871,  5358,  5894,  6484,
+        7132,  7845,  8630,  9493,  10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
+    };
+
+    struct ImaChannel
+    {
+        int predictor;
+        int index;
+    };
+
+    int16_t DecodeImaNibble(ImaChannel& channel, const unsigned nibble)
+    {
+        const auto step = IMA_STEP_TABLE[channel.index];
+
+        auto diff = step >> 3;
+        if (nibble & 1u)
+            diff += step >> 2;
+        if (nibble & 2u)
+            diff += step >> 1;
+        if (nibble & 4u)
+            diff += step;
+        if (nibble & 8u)
+            diff = -diff;
+
+        channel.predictor = std::clamp(channel.predictor + diff, -32768, 32767);
+        channel.index = std::clamp(channel.index + IMA_INDEX_TABLE[nibble & 15u], 0, 88);
+
+        return static_cast<int16_t>(channel.predictor);
+    }
+
+    bool DecodeImaAdpcm(IW4::AILSOUNDINFO& info, char*& data, ZoneMemory& memory)
+    {
+        const auto channels = static_cast<size_t>(info.channels);
+        const auto blockSize = static_cast<size_t>(info.block_size);
+        if (channels == 0u || channels > 2u || blockSize <= 4u * channels || (blockSize - 4u * channels) % (4u * channels) != 0u)
+            return false;
+
+        const auto samplesPerBlock = (blockSize - 4u * channels) * 2u / channels + 1u;
+        const auto blockCount = (info.data_len + blockSize - 1u) / blockSize;
+        const auto frameCount = std::min<size_t>(info.samples, blockCount * samplesPerBlock);
+
+        auto* pcm = memory.Alloc<int16_t>(frameCount * channels);
+        const auto* src = reinterpret_cast<const uint8_t*>(data);
+
+        size_t frame = 0u;
+        for (size_t block = 0u; block < blockCount && frame < frameCount; block++)
+        {
+            const auto* in = src + block * blockSize;
+            const auto available = std::min<size_t>(blockSize, info.data_len - block * blockSize);
+            if (available < 4u * channels)
+                break;
+
+            ImaChannel state[2]{};
+            for (size_t c = 0u; c < channels; c++)
+            {
+                const auto* header = in + 4u * c;
+                state[c].predictor = static_cast<int16_t>(header[0] | header[1] << 8);
+                state[c].index = std::clamp<int>(header[2], 0, 88);
+                pcm[frame * channels + c] = static_cast<int16_t>(state[c].predictor);
+            }
+
+            const auto groups = (available - 4u * channels) / (4u * channels);
+            for (size_t group = 0u; group < groups; group++)
+            {
+                for (size_t c = 0u; c < channels; c++)
+                {
+                    const auto* chunk = in + 4u * channels + (group * channels + c) * 4u;
+                    for (size_t n = 0u; n < 8u; n++)
+                    {
+                        const auto sample = DecodeImaNibble(state[c], (chunk[n / 2u] >> ((n & 1u) * 4u)) & 15u);
+                        const auto at = frame + 1u + group * 8u + n;
+                        if (at < frameCount)
+                            pcm[at * channels + c] = sample;
+                    }
+                }
+            }
+
+            frame = std::min(frameCount, frame + 1u + groups * 8u);
+        }
+
+        info.format = WAVE_FORMAT_PCM;
+        info.bits = 16;
+        info.block_size = static_cast<unsigned>(2u * channels);
+        info.samples = static_cast<unsigned>(frame);
+        info.data_len = static_cast<unsigned>(frame * channels * sizeof(int16_t));
+        data = reinterpret_cast<char*>(pcm);
+
+        return true;
+    }
+
     // The two builds describe a loaded sound to different audio libraries. x86 fills a Miles
     // AILSOUNDINFO. x64 fills the WAVEFORMATEX that XAudio2 wants, laid out in the note on
     // IW4MS::MssSound, so a converted sound has to be translated field by field. Both structures
@@ -235,10 +334,13 @@ namespace
     //
     // Left unhandled, the writer emits a WAVEFORMATEX of zero channels at zero hertz. The voice
     // is never created and every weapon in the zone plays silence.
-    void RetargetLoadedSoundToIw4ms(IW4::LoadedSound& source)
+    void RetargetLoadedSoundToIw4ms(IW4::LoadedSound& source, ZoneMemory& memory)
     {
         static_assert(sizeof(IW4::MssSound) == sizeof(IW4MS::MssSound));
         static_assert(offsetof(IW4::MssSound, data) == offsetof(IW4MS::MssSound, data));
+
+        if (source.sound.info.format == WAVE_FORMAT_IMA_ADPCM && source.sound.data != nullptr)
+            DecodeImaAdpcm(source.sound.info, source.sound.data, memory);
 
         const IW4::AILSOUNDINFO src = source.sound.info;
         auto& dst = reinterpret_cast<IW4MS::MssSound&>(source.sound);
@@ -394,7 +496,7 @@ namespace
                 if (!asset->m_ptr)
                     continue;
 
-                RetargetLoadedSoundToIw4ms(*static_cast<IW4::LoadedSound*>(asset->m_ptr));
+                RetargetLoadedSoundToIw4ms(*static_cast<IW4::LoadedSound*>(asset->m_ptr), target->Memory());
                 loadedSounds++;
             }
             else if (asset->m_type == IW4::ASSET_TYPE_FXWORLD)
