@@ -26,5 +26,7 @@ namespace cryptography
         // If needed, add a signing method
 
         virtual bool Verify(const uint8_t* signedData, size_t signedDataSize, const uint8_t* signature, size_t signatureSize) = 0;
+
+        virtual bool Decrypt(const uint8_t* cipherText, size_t cipherTextSize, uint8_t* plainText, size_t& plainTextSize) = 0;
     };
 } // namespace cryptography

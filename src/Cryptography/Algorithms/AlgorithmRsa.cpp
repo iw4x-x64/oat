@@ -49,6 +49,36 @@ namespace
             return result == 1;
         }
 
+        bool Decrypt(const uint8_t* cipherText, const size_t cipherTextSize, uint8_t* plainText, size_t& plainTextSize) override
+        {
+            const ltc_hash_descriptor* hashDesc = GetHashDescriptor();
+            const int hashId = register_hash(hashDesc);
+            const int padding = GetPaddingMode();
+
+            int status = 0;
+            const ltc_rsa_parameters rsaParams{
+                .hash_idx = hashId,
+                .mgf1_hash_idx = hashId,
+            };
+            ltc_rsa_op_parameters params{
+                .params = rsaParams,
+                .padding = padding,
+                .wprng = -1,
+                .prng = nullptr,
+                .u = {},
+            };
+
+            auto outSize = static_cast<unsigned long>(plainTextSize);
+            if (rsa_decrypt_key_v2(cipherText, static_cast<unsigned long>(cipherTextSize), plainText, &outSize, &params, &status, &m_key) != CRYPT_OK
+                || status != 1)
+            {
+                return false;
+            }
+
+            plainTextSize = outSize;
+            return true;
+        }
+
     private:
         [[nodiscard]] const ltc_hash_descriptor* GetHashDescriptor() const
         {
@@ -69,6 +99,9 @@ namespace
             {
             case RsaPaddingMode::RSA_PADDING_PKS1:
                 return LTC_PKCS_1_V1_5;
+
+            case RsaPaddingMode::RSA_PADDING_OAEP:
+                return LTC_PKCS_1_OAEP;
 
             default:
             case RsaPaddingMode::RSA_PADDING_PSS:

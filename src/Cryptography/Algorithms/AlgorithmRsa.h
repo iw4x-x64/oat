@@ -11,6 +11,7 @@ namespace cryptography
     {
         RSA_PADDING_PKS1,
         RSA_PADDING_PSS,
+        RSA_PADDING_OAEP,
     };
 
     std::unique_ptr<IPublicKeyAlgorithm> CreateRsa(HashingAlgorithm hashingAlgorithm, RsaPaddingMode paddingMode);

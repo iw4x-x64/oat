@@ -17,12 +17,14 @@ public:
                           const size_t chunkSize,
                           const unsigned maxMasterBlockCount,
                           std::unique_ptr<cryptography::IHashFunction> hashFunction,
-                          IHashProvider* masterBlockHashProvider)
+                          IHashProvider* masterBlockHashProvider,
+                          IStreamCipherProvider* chunkCipherProvider)
         : m_authed_chunk_count(authedChunkCount),
           m_chunk_size(chunkSize),
           m_max_master_block_count(maxMasterBlockCount),
           m_hash_function(std::move(hashFunction)),
           m_master_block_hash_provider(masterBlockHashProvider),
+          m_chunk_cipher_provider(chunkCipherProvider),
           m_chunk_hashes_buffer(std::make_unique<uint8_t[]>(m_authed_chunk_count * m_hash_function->GetHashSize())),
           m_current_chunk_hash_buffer(std::make_unique<uint8_t[]>(m_hash_function->GetHashSize())),
           m_chunk_buffer(std::make_unique<uint8_t[]>(m_chunk_size)),
@@ -75,6 +77,17 @@ private:
             if (m_current_chunk_size == 0)
                 return false;
 
+            const uint8_t* masterBlockHash = nullptr;
+            size_t masterBlockHashSize = 0;
+
+            if (m_current_chunk_in_group == 0)
+            {
+                m_master_block_hash_provider->GetHash(m_current_group - 1, &masterBlockHash, &masterBlockHashSize);
+                DecryptChunk(masterBlockHash, masterBlockHashSize);
+            }
+            else
+                DecryptChunk(&m_chunk_hashes_buffer[(m_current_chunk_in_group - 1) * m_hash_function->GetHashSize()], m_hash_function->GetHashSize());
+
             m_hash_function->Init();
             m_hash_function->Process(m_chunk_buffer.get(), m_current_chunk_size);
             m_hash_function->Finish(m_current_chunk_hash_buffer.get());
@@ -83,10 +96,6 @@ private:
             {
                 if (m_current_chunk_size < m_authed_chunk_count * m_hash_function->GetHashSize())
                     throw UnexpectedEndOfFileException();
-
-                const uint8_t* masterBlockHash = nullptr;
-                size_t masterBlockHashSize = 0;
-                m_master_block_hash_provider->GetHash(m_current_group - 1, &masterBlockHash, &masterBlockHashSize);
 
                 if (masterBlockHashSize != m_hash_function->GetHashSize()
                     || std::memcmp(m_current_chunk_hash_buffer.get(), masterBlockHash, m_hash_function->GetHashSize()) != 0)
@@ -122,12 +131,28 @@ private:
         }
     }
 
+    void DecryptChunk(const uint8_t* expectedHash, const size_t expectedHashSize)
+    {
+        static constexpr size_t IV_SIZE = 16;
+
+        if (m_chunk_cipher_provider == nullptr)
+            return;
+
+        if (expectedHashSize < IV_SIZE)
+            throw InvalidHashException();
+
+        auto& cipher = m_chunk_cipher_provider->GetStreamCipher();
+        cipher.SetIv(expectedHash, IV_SIZE);
+        cipher.Process(m_chunk_buffer.get(), m_chunk_buffer.get(), m_current_chunk_size);
+    }
+
     const unsigned m_authed_chunk_count;
     const size_t m_chunk_size;
     const unsigned m_max_master_block_count;
 
     const std::unique_ptr<cryptography::IHashFunction> m_hash_function;
     IHashProvider* const m_master_block_hash_provider;
+    IStreamCipherProvider* const m_chunk_cipher_provider;
     const std::unique_ptr<uint8_t[]> m_chunk_hashes_buffer;
     const std::unique_ptr<uint8_t[]> m_current_chunk_hash_buffer;
 
@@ -145,8 +170,10 @@ namespace processor
                                                                  size_t chunkSize,
                                                                  unsigned maxMasterBlockCount,
                                                                  std::unique_ptr<cryptography::IHashFunction> hashFunction,
-                                                                 IHashProvider* masterBlockHashProvider)
+                                                                 IHashProvider* masterBlockHashProvider,
+                                                                 IStreamCipherProvider* chunkCipherProvider)
     {
-        return std::make_unique<ProcessorAuthedBlocks>(authedChunkCount, chunkSize, maxMasterBlockCount, std::move(hashFunction), masterBlockHashProvider);
+        return std::make_unique<ProcessorAuthedBlocks>(
+            authedChunkCount, chunkSize, maxMasterBlockCount, std::move(hashFunction), masterBlockHashProvider, chunkCipherProvider);
     }
 } // namespace processor

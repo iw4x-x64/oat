@@ -2,6 +2,7 @@
 
 #include "Cryptography.h"
 #include "Loading/IHashProvider.h"
+#include "Loading/IStreamCipherProvider.h"
 #include "Loading/StreamProcessor.h"
 
 #include <memory>
@@ -12,5 +13,6 @@ namespace processor
                                                                  size_t chunkSize,
                                                                  unsigned maxMasterBlockCount,
                                                                  std::unique_ptr<cryptography::IHashFunction> hashFunction,
-                                                                 IHashProvider* masterBlockHashProvider);
-}
+                                                                 IHashProvider* masterBlockHashProvider,
+                                                                 IStreamCipherProvider* chunkCipherProvider = nullptr);
+} // namespace processor

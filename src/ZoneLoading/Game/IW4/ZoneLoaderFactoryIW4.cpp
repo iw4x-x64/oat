@@ -9,11 +9,13 @@
 #include "Loading/Processor/ProcessorCaptureData.h"
 #include "Loading/Processor/ProcessorIW4xDecryption.h"
 #include "Loading/Processor/ProcessorInflate.h"
+#include "Loading/Processor/ProcessorStreamCipher.h"
 #include "Loading/Steps/StepAddProcessor.h"
 #include "Loading/Steps/StepAllocXBlocks.h"
 #include "Loading/Steps/StepDumpData.h"
 #include "Loading/Steps/StepLoadHash.h"
 #include "Loading/Steps/StepLoadSignature.h"
+#include "Loading/Steps/StepLoadStreamCipherKey.h"
 #include "Loading/Steps/StepLoadZoneContent.h"
 #include "Loading/Steps/StepLoadZoneSizes.h"
 #include "Loading/Steps/StepRemoveProcessor.h"
@@ -41,6 +43,7 @@ namespace
     {
         ZoneLoaderInspectionResult m_generic_result;
         bool m_is_iw4x;
+        int m_zone_version = ZoneConstants::ZONE_VERSION_PC;
     };
 
     std::optional<ZoneLoaderInspectionResultIW4> InspectZoneHeaderIw4(ZoneDataPeeking& filePeek)
@@ -102,6 +105,26 @@ namespace
                                                    .m_is_encrypted = false,
                                                    },
                     .m_is_iw4x = false,
+                };
+            }
+        }
+        else if (const auto version = static_cast<int>(endianness::FromLittleEndian(header.m_version)); ZoneConstants::IsAlphaVersion(version))
+        {
+            if (!memcmp(header.m_magic, ZoneConstants::MAGIC_SIGNED_INFINITY_WARD, std::char_traits<char>::length(ZoneConstants::MAGIC_SIGNED_INFINITY_WARD)))
+            {
+                return ZoneLoaderInspectionResultIW4{
+                    .m_generic_result =
+                        ZoneLoaderInspectionResult{
+                                                   .m_game_id = GameId::IW4,
+                                                   .m_endianness = GameEndianness::LE,
+                                                   .m_word_size = GameWordSize::ARCH_32,
+                                                   .m_platform = GamePlatform::PC,
+                                                   .m_is_official = true,
+                                                   .m_is_signed = true,
+                                                   .m_is_encrypted = version >= ZoneConstants::ZONE_VERSION_ALPHA3,
+                                                   },
+                    .m_is_iw4x = false,
+                    .m_zone_version = version,
                 };
             }
         }
@@ -205,8 +228,33 @@ namespace
         if (!inspectResult.m_generic_result.m_is_signed)
             return;
 
+        const auto isAlpha = ZoneConstants::IsAlphaVersion(inspectResult.m_zone_version);
+
         // If file is signed setup a RSA instance.
-        auto rsa = SetupRsa(inspectResult.m_generic_result.m_is_official, inspectResult.m_generic_result.m_platform);
+        auto rsa = isAlpha ? nullptr : SetupRsa(inspectResult.m_generic_result.m_is_official, inspectResult.m_generic_result.m_platform);
+
+        IStreamCipherProvider* cipherProvider = nullptr;
+        StreamProcessor* headerCipherPtr = nullptr;
+        if (inspectResult.m_generic_result.m_is_encrypted)
+        {
+            auto keyRsa = cryptography::CreateRsa(cryptography::HashingAlgorithm::RSA_HASH_SHA256,
+                                                  inspectResult.m_zone_version >= ZoneConstants::ZONE_VERSION_ALPHA_PKCS1 ? cryptography::RsaPaddingMode::RSA_PADDING_PKS1
+                                                                                                                           : cryptography::RsaPaddingMode::RSA_PADDING_OAEP);
+            if (!keyRsa->SetKey(ZoneConstants::RSA_PRIVATE_KEY_ALPHA, sizeof(ZoneConstants::RSA_PRIVATE_KEY_ALPHA)))
+            {
+                con::error("Invalid private key for zone decryption");
+                return;
+            }
+
+            auto loadKey = step::CreateStepLoadStreamCipherKey(
+                std::move(keyRsa), ZoneConstants::ALPHA_ENCRYPTED_KEY_SIZE, ZoneConstants::ALPHA_KEY_SIZE, ZoneConstants::ALPHA_IV_SIZE);
+            cipherProvider = loadKey.get();
+            zoneLoader.AddLoadingStep(std::move(loadKey));
+
+            auto headerCipher = processor::CreateProcessorStreamCipher(cipherProvider);
+            headerCipherPtr = headerCipher.get();
+            zoneLoader.AddLoadingStep(step::CreateStepAddProcessor(std::move(headerCipher)));
+        }
 
         zoneLoader.AddLoadingStep(step::CreateStepVerifyMagic(ZoneConstants::MAGIC_AUTH_HEADER));
         zoneLoader.AddLoadingStep(step::CreateStepSkipBytes(4)); // Skip reserved
@@ -219,7 +267,8 @@ namespace
         auto* subHeaderHashSignaturePtr = subHeaderHashSignature.get();
         zoneLoader.AddLoadingStep(std::move(subHeaderHashSignature));
 
-        zoneLoader.AddLoadingStep(step::CreateStepVerifySignature(std::move(rsa), subHeaderHashSignaturePtr, subHeaderHashPtr));
+        if (rsa)
+            zoneLoader.AddLoadingStep(step::CreateStepVerifySignature(std::move(rsa), subHeaderHashSignaturePtr, subHeaderHashPtr));
 
         auto subHeaderCapture = processor::CreateProcessorCaptureData(sizeof(DB_AuthSubHeader));
         auto* subHeaderCapturePtr = subHeaderCapture.get();
@@ -239,12 +288,16 @@ namespace
         // Skip the rest of the first chunk
         zoneLoader.AddLoadingStep(step::CreateStepSkipBytes(ZoneConstants::AUTHED_CHUNK_SIZE - sizeof(DB_AuthHeader)));
 
+        if (headerCipherPtr)
+            zoneLoader.AddLoadingStep(step::CreateStepRemoveProcessor(headerCipherPtr));
+
         zoneLoader.AddLoadingStep(step::CreateStepAddProcessor(
             processor::CreateProcessorAuthedBlocks(ZoneConstants::AUTHED_CHUNK_COUNT_PER_GROUP,
                                                    ZoneConstants::AUTHED_CHUNK_SIZE,
                                                    static_cast<unsigned>(std::extent_v<decltype(DB_AuthSubHeader::masterBlockHashes)>),
                                                    cryptography::CreateSha256(),
-                                                   masterBlockHashesPtr)));
+                                                   masterBlockHashesPtr,
+                                                   cipherProvider)));
     }
 } // namespace
 
