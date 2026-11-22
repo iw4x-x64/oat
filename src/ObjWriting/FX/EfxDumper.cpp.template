@@ -294,7 +294,7 @@ namespace
             if (scale > 0.0f)
             {
                 int exponent;
-                std::frexp(scale, &exponent);
+                static_cast<void>(std::frexp(scale, &exponent));
                 scale = std::ldexp(1.0f, exponent);
             }
 
