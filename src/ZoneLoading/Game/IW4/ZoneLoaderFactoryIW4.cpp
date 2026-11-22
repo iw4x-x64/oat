@@ -222,16 +222,33 @@ namespace
         }
     }
 
+    std::unique_ptr<cryptography::IPublicKeyAlgorithm> SetupRsaAlpha(const int zoneVersion)
+    {
+        auto rsa = cryptography::CreateRsa(cryptography::HashingAlgorithm::RSA_HASH_SHA256,
+                                           zoneVersion >= ZoneConstants::ZONE_VERSION_ALPHA_PKCS1 ? cryptography::RsaPaddingMode::RSA_PADDING_PKS1
+                                                                                                  : cryptography::RsaPaddingMode::RSA_PADDING_PSS);
+
+        if (!rsa->SetKey(ZoneConstants::RSA_PUBLIC_KEY_ALPHA, sizeof(ZoneConstants::RSA_PUBLIC_KEY_ALPHA)))
+        {
+            con::error("Invalid public key for signature checking");
+            return nullptr;
+        }
+
+        return rsa;
+    }
+
     void AddAuthHeaderSteps(const ZoneLoaderInspectionResultIW4& inspectResult, ZoneLoader& zoneLoader, const std::string& fileName)
     {
         // Unsigned zones do not have an auth header
         if (!inspectResult.m_generic_result.m_is_signed)
             return;
 
-        const auto isAlpha = ZoneConstants::IsAlphaVersion(inspectResult.m_zone_version);
-
         // If file is signed setup a RSA instance.
-        auto rsa = isAlpha ? nullptr : SetupRsa(inspectResult.m_generic_result.m_is_official, inspectResult.m_generic_result.m_platform);
+        auto rsa = inspectResult.m_zone_version >= ZoneConstants::ZONE_VERSION_ALPHA3
+                       ? SetupRsaAlpha(inspectResult.m_zone_version)
+                       : SetupRsa(inspectResult.m_generic_result.m_is_official, inspectResult.m_generic_result.m_platform);
+        if (!rsa)
+            return;
 
         IStreamCipherProvider* cipherProvider = nullptr;
         StreamProcessor* headerCipherPtr = nullptr;
@@ -267,8 +284,7 @@ namespace
         auto* subHeaderHashSignaturePtr = subHeaderHashSignature.get();
         zoneLoader.AddLoadingStep(std::move(subHeaderHashSignature));
 
-        if (rsa)
-            zoneLoader.AddLoadingStep(step::CreateStepVerifySignature(std::move(rsa), subHeaderHashSignaturePtr, subHeaderHashPtr));
+        zoneLoader.AddLoadingStep(step::CreateStepVerifySignature(std::move(rsa), subHeaderHashSignaturePtr, subHeaderHashPtr));
 
         auto subHeaderCapture = processor::CreateProcessorCaptureData(sizeof(DB_AuthSubHeader));
         auto* subHeaderCapturePtr = subHeaderCapture.get();
