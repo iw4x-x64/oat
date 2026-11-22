@@ -170,13 +170,13 @@ bool OncePerAssetRenderingContext::UsedTypeHasActions(const RenderingUsedType* u
     if (!usedType->m_non_runtime_reference_exists && !usedType->m_is_context_asset)
         return false;
 
-    if (usedType->m_info->m_post_load_action)
+    if (usedType->m_info->m_post_load_action || usedType->m_info->m_layout_action)
         return true;
 
     if (std::ranges::any_of(usedType->m_info->m_ordered_members,
                             [](const auto& member) -> bool
                             {
-                                return member->m_post_load_action && !MemberComputations(member.get()).ShouldIgnore();
+                                return (member->m_post_load_action || member->m_layout_action) && !MemberComputations(member.get()).ShouldIgnore();
                             }))
     {
         return true;

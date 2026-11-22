@@ -1043,7 +1043,10 @@ namespace
                 LINE("{")
                 m_intendation++;
 
-                LINEF("const auto arrayFill = m_stream.LoadWithFill({0} * count);", def->GetSize())
+                if (info->m_layout_action)
+                    LINEF("const auto arrayFill = m_actions.{0}(m_stream, count);", info->m_layout_action->m_action_name)
+                else
+                    LINEF("const auto arrayFill = m_stream.LoadWithFill({0} * count);", def->GetSize())
                 LINEF("auto* arrayStart = {0};", MakeTypeVarName(def))
                 LINEF("auto* var = {0};", MakeTypeVarName(def))
                 LINE("for (size_t index = 0; index < count; index++)")
@@ -1162,7 +1165,10 @@ namespace
             else if (member->m_type && !member->m_type->m_has_matching_cross_platform_structure)
             {
                 LINEF("const auto fillArraySize = static_cast<size_t>({0});", MakeEvaluation(modifier.GetArrayPointerCountEvaluation()))
-                LINEF("const auto fill = m_stream.LoadWithFill({0} * fillArraySize);", member->m_member->m_type_declaration->m_type->GetSize())
+                if (member->m_type->m_layout_action)
+                    LINEF("const auto fill = m_actions.{0}(m_stream, fillArraySize);", member->m_type->m_layout_action->m_action_name)
+                else
+                    LINEF("const auto fill = m_stream.LoadWithFill({0} * fillArraySize);", member->m_member->m_type_declaration->m_type->GetSize())
                 LINE("for (auto i = 0uz; i < fillArraySize; i++)")
                 LINE("{")
                 m_intendation++;
@@ -1335,9 +1341,14 @@ namespace
             else if (member->m_type && !member->m_type->m_has_matching_cross_platform_structure)
             {
                 LINEF("{0} = {1};", MakeTypeVarName(member->m_member->m_type_declaration->m_type), MakeMemberAccess(info, member, modifier))
-                LINEF("FillStruct_{0}(m_stream.LoadWithFill({1}));",
-                      MakeSafeTypeName(member->m_member->m_type_declaration->m_type),
-                      member->m_member->m_type_declaration->m_type->GetSize())
+                if (member->m_type->m_layout_action)
+                    LINEF("FillStruct_{0}(m_actions.{1}(m_stream, 1uz));",
+                          MakeSafeTypeName(member->m_member->m_type_declaration->m_type),
+                          member->m_type->m_layout_action->m_action_name)
+                else
+                    LINEF("FillStruct_{0}(m_stream.LoadWithFill({1}));",
+                          MakeSafeTypeName(member->m_member->m_type_declaration->m_type),
+                          member->m_member->m_type_declaration->m_type->GetSize())
             }
             else
             {
@@ -1684,14 +1695,21 @@ namespace
             const MemberComputations computations(member);
 
             const auto notInDefaultNormalBlock = computations.IsNotInDefaultNormalBlock();
-            if (notInDefaultNormalBlock)
+            const auto pushesBlock = notInDefaultNormalBlock || member->m_layout_action;
+            if (member->m_layout_action)
+            {
+                LINEF("m_stream.PushBlock(m_actions.{0}({1}));",
+                      member->m_layout_action->m_action_name,
+                      notInDefaultNormalBlock ? member->m_fast_file_block->m_name : m_env.m_default_normal_block->m_name)
+            }
+            else if (notInDefaultNormalBlock)
             {
                 LINEF("m_stream.PushBlock({0});", member->m_fast_file_block->m_name)
             }
 
             LoadMember_PointerCheck(info, member, modifier, loadType);
 
-            if (notInDefaultNormalBlock)
+            if (pushesBlock)
             {
                 LINE("m_stream.PopBlock();")
             }
@@ -1896,7 +1914,11 @@ namespace
                 }
                 else
                 {
-                    if (dynamicMember == nullptr)
+                    if (dynamicMember == nullptr && info->m_layout_action)
+                    {
+                        LINEF("FillStruct_{0}(m_actions.{1}(m_stream, 1uz));", MakeSafeTypeName(info->m_definition), info->m_layout_action->m_action_name)
+                    }
+                    else if (dynamicMember == nullptr)
                     {
                         LINEF("FillStruct_{0}(m_stream.LoadWithFill({1}));", MakeSafeTypeName(info->m_definition), info->m_definition->GetSize())
                     }
