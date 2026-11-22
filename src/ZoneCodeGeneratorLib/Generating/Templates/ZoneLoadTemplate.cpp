@@ -1074,6 +1074,10 @@ namespace
 
             LINEF("{0} = var;", MakeTypeVarName(info->m_definition))
             LINEF("Load_{0}(false);", info->m_definition->m_name)
+            if (info->m_post_load_action)
+            {
+                LINE(MakeCustomActionCall(info->m_post_load_action.get()))
+            }
             LINE("var++;")
 
             m_intendation--;
@@ -1120,6 +1124,12 @@ namespace
                     LINEF("varXString = const_cast<const char**>(&{0});", MakeMemberAccess(info, member, modifier))
                 }
                 LINE("LoadXString(false);")
+
+                if (member->m_post_load_action)
+                {
+                    LINE("")
+                    LINE(MakeCustomActionCall(member->m_post_load_action.get()))
+                }
             }
             else if (loadType == MemberLoadType::POINTER_ARRAY)
             {
