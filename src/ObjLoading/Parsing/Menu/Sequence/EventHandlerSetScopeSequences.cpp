@@ -1356,6 +1356,9 @@ void EventHandlerSetScopeSequences::AddSequences(const FeatureLevel featureLevel
                 create.ScriptKeyword("DeleteFavorite"),
             }));
             AddSequence(SequenceUiScriptStatement::Create({
+                create.ScriptKeyword("DownloadServerMod"),
+            }));
+            AddSequence(SequenceUiScriptStatement::Create({
                 create.ScriptKeyword("nextStartupMessage"),
             }));
             AddSequence(SequenceUiScriptStatement::Create({
