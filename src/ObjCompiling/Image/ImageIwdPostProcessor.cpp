@@ -61,8 +61,13 @@ namespace image
             FindNextObjContainer();
 
         if (m_current_iwd && m_zone_definition.m_asset_index_in_definition >= m_current_iwd_start_index)
+        {
             m_current_iwd->AddFile(GetFileNameForAsset(assetInfo.m_name, ".iwi"));
+            OnAssetAddedToIwd(assetInfo);
+        }
     }
+
+    void AbstractIwdPostProcessor::OnAssetAddedToIwd([[maybe_unused]] XAssetInfoGeneric& assetInfo) {}
 
     void AbstractIwdPostProcessor::FinalizeZone(AssetCreationContext& context)
     {

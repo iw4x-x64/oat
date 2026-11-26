@@ -20,6 +20,9 @@ namespace image
         void PostProcessAsset(XAssetInfoGeneric& assetInfo, AssetCreationContext& context) override;
         void FinalizeZone(AssetCreationContext& context) override;
 
+    protected:
+        virtual void OnAssetAddedToIwd(XAssetInfoGeneric& assetInfo);
+
     private:
         void FindNextObjContainer();
 

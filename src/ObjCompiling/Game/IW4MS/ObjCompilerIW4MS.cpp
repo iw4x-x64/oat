@@ -13,6 +13,25 @@ using namespace IW4MS;
 
 namespace
 {
+    class ImageIwdPostProcessor final : public image::AbstractIwdPostProcessor
+    {
+    public:
+        using AbstractIwdPostProcessor::AbstractIwdPostProcessor;
+
+        [[nodiscard]] asset_type_t GetHandlingAssetType() const override
+        {
+            return AssetImage::EnumEntry;
+        }
+
+    protected:
+        void OnAssetAddedToIwd(XAssetInfoGeneric& assetInfo) override
+        {
+            auto* image = static_cast<GfxImage*>(assetInfo.m_ptr);
+            if (image->texture.loadDef)
+                image->texture.loadDef->resourceSize = 0;
+        }
+    };
+
     void ConfigureCompilers(AssetCreatorCollection& collection, Zone& zone, ISearchPath& searchPath)
     {
         auto& memory = zone.Memory();
@@ -30,8 +49,8 @@ namespace
                                  ZoneAssetCreationStateContainer& zoneStates,
                                  IOutputPath& outDir)
     {
-        if (image::IwdPostProcessor<AssetImage>::AppliesToZoneDefinition(zoneDefinition))
-            collection.AddAssetPostProcessor(std::make_unique<image::IwdPostProcessor<AssetImage>>(zoneDefinition, searchPath, zoneStates, outDir));
+        if (ImageIwdPostProcessor::AppliesToZoneDefinition(zoneDefinition))
+            collection.AddAssetPostProcessor(std::make_unique<ImageIwdPostProcessor>(zoneDefinition, searchPath, zoneStates, outDir));
     }
 } // namespace
 
